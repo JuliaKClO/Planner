@@ -43,7 +43,7 @@ class WeekVisualTest {
 
     private fun waitForWeek() {
         compose.waitUntil(15000) {
-            compose.onAllNodes(add).fetchSemanticsNodes().size == 7 &&
+            compose.onAllNodes(add).fetchSemanticsNodes().isNotEmpty() &&
                 compose.onAllNodesWithText("Загрузка…").fetchSemanticsNodes().isEmpty()
         }
     }
@@ -118,6 +118,32 @@ class WeekVisualTest {
         }
     }
 
+    @Test fun switchingExpandedDaysKeepsAddOnTheSelectedDate() {
+        val repo = EntryRepository(PlannerDatabase.open(compose.activity))
+        val monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
+        val tuesday = monday.plusDays(1)
+        runBlocking {
+            repo.save(Entry(title = "Встреча", body = "Повестка понедельника", plannedDate = monday))
+            repo.save(Entry(title = "Отчёт", body = "Итоги вторника", plannedDate = tuesday))
+        }
+        compose.waitUntil(15000) { compose.onAllNodesWithText("Встреча").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Пн ${monday.dayOfMonth}").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithText("Повестка понедельника").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Повестка понедельника").assertIsDisplayed()
+        val tuesdayHeader = compose.onNodeWithText("Вт ${tuesday.dayOfMonth}")
+        tuesdayHeader.performScrollTo().performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithText("Итоги вторника").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Итоги вторника").assertIsDisplayed()
+        compose.onNodeWithText("Повестка понедельника").assertDoesNotExist()
+        compose.onNode(hasContentDescription("Добавить запись на вторник", substring = true)).performClick()
+        compose.onNodeWithText("Новая запись").assertExists()
+        compose.onNodeWithText("Дата · ${tuesday.format(ru.workweek.planner.ui.dateFormat)}").assertExists()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        tuesdayHeader.performClick()
+        compose.onNodeWithText("Итоги вторника").assertDoesNotExist()
+        compose.onNodeWithText("Рабочая неделя").assertIsDisplayed()
+    }
+
     @Test fun readLongEntriesAndInspectScreensInBothThemes() {
         waitForWeek()
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -132,11 +158,17 @@ class WeekVisualTest {
             }
         }
         compose.waitUntil(15000) { compose.onAllNodesWithText("Ещё 19", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Ещё 19", substring = true).performClick()
-        compose.onNodeWithText("Добавить запись").assertExists()
+        val preview = compose.onNodeWithText("Ещё 19", substring = true)
+        preview.performClick()
+        compose.onNodeWithText("Рабочая неделя").assertIsDisplayed()
+        compose.onNodeWithText("Рабочая встреча №0").assertIsDisplayed()
+        compose.onNodeWithText("Свернуть").performClick()
+        preview.assertIsDisplayed()
+        compose.onNodeWithText("Свернуть").assertDoesNotExist()
+        preview.performClick()
         captureBothThemes("day")
         val dayList = compose.onNode(hasScrollToIndexAction())
-        dayList.performScrollToIndex(19)
+        dayList.performScrollToKey("day-19")
         val description = compose.onNodeWithText(body, useUnmergedTree = true)
         description.assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
@@ -148,7 +180,7 @@ class WeekVisualTest {
         description.assertIsDisplayed()
         assertTrue(description.getUnclippedBoundsInRoot().bottom <= dayList.getUnclippedBoundsInRoot().bottom)
         capture("day-last-lines")
-        dayList.performScrollToIndex(19)
+        dayList.performScrollToKey("day-19")
         compose.onNodeWithText(longTitle).assertIsDisplayed().performClick()
         compose.onNodeWithText(longTitle).assertExists()
         compose.onNodeWithText(body).assertExists()
@@ -166,7 +198,7 @@ class WeekVisualTest {
         compose.onNodeWithText("Продолжить редактирование").performClick()
         compose.onNodeWithText("Название").performTextReplacement(longTitle)
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithText("Свернуть").performClick()
         compose.onNodeWithContentDescription("Выбрать дату").performClick()
         captureBothThemes("calendar")
         val monthName = date.month.getDisplayName(java.time.format.TextStyle.FULL_STANDALONE, java.util.Locale.forLanguageTag("ru"))
@@ -251,8 +283,9 @@ class WeekVisualTest {
     fun largeTextWeekCanReachSundayAndCreateAnEntry() {
         captureBothThemes("360-200")
         capture("week-200")
-        val sunday = compose.onAllNodes(add)[6]
-        sunday.performScrollTo().assertIsDisplayed().performClick()
+        val sunday = hasContentDescription("Добавить запись на воскресенье", substring = true)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(sunday)
+        compose.onNode(sunday).assertIsDisplayed().performClick()
         compose.onNodeWithText("Сохранить").performScrollTo().assertIsDisplayed()
         capture("editor-200")
     }
@@ -261,7 +294,7 @@ class WeekVisualTest {
     fun darkTallPhoneWithLargeText() {
         captureBothThemes("412-150")
         capture("week-dark-150")
-        compose.onAllNodes(add)[6].performScrollTo().assertIsDisplayed()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("Добавить запись на воскресенье", substring = true))
     }
 
     @Test @Config(qualifiers = "ru-w640dp-h360dp-land-mdpi", fontScale = 2f)
@@ -272,7 +305,7 @@ class WeekVisualTest {
         compose.onNodeWithText("ДД.ММ.ГГГГ").performTextReplacement("31.12.2026")
         compose.onNodeWithText("Перейти").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Выбрать дату").assertTextEquals("28.12.2026 — 03.01.2027")
-        compose.onAllNodes(add)[6].performScrollTo().assertIsDisplayed()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasContentDescription("Добавить запись на воскресенье", substring = true))
         capture("week-landscape-200")
     }
 

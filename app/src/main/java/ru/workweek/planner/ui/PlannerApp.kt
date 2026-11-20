@@ -48,6 +48,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     val appearance = settings.appearance
     var screen by rememberSaveable { mutableStateOf("week") }
     var selectedValue by rememberSaveable { mutableStateOf(bounded(deviceDate()).toString()) }
+    var dayExpanded by rememberSaveable { mutableStateOf(false) }
     var today by remember { mutableStateOf(deviceDate()) }
     var query by rememberSaveable { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -88,6 +89,10 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     val results = if (searchLoad.request == searchRequest && searchQuery == query) searchLoad.rows else emptyList()
     val marked by remember(repository, calendarMonth) { repository.observeMarkedDates(calendarMonth, YearMonth.from(calendarMonth).atEndOfMonth()).catch { error = "Не удалось прочитать календарь." } }.collectAsState(initial = emptyList())
     val searchState = rememberLazyListState()
+    fun selectDate(date: LocalDate) {
+        selectedValue = date.toString()
+        dayExpanded = false
+    }
     fun fingerprint() = listOf(title, body, planned, time, completed.toString(), remind.toString()).joinToString("\u0000")
     fun openEditor(entry: Entry?, date: LocalDate) {
         origin = screen
@@ -100,7 +105,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         baseline = fingerprint(); fieldErrors = emptyMap(); error = null; screen = "editor"
     }
     fun leaveEditor() {
-        if (pendingWeek) { selectedValue = planned; screen = "week"; pendingWeek = false } else screen = origin
+        if (pendingWeek) { selectDate(LocalDate.parse(planned)); screen = "week"; pendingWeek = false } else screen = origin
     }
     fun closeEditor() {
         if (busy) return
@@ -121,7 +126,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         scope.launch {
             try {
                 repository.save(entry)
-                if (origin != "search") selectedValue = entry.plannedDate.toString()
+                if (origin != "search" && entry.plannedDate != selected) selectDate(entry.plannedDate)
                 leaveEditor(); exitPrompt = false; error = null
                 runCatching { ReminderController.refresh(context) }.onFailure { error = "Запись сохранена. Не удалось восстановить расписание сводки." }
             } catch (_: Exception) { error = "Не удалось сохранить запись. Данные остались в форме, повторите попытку." }
@@ -149,7 +154,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     }
     LaunchedEffect(targetDate) {
         targetDate?.let { value -> runCatching { LocalDate.parse(value) }.getOrNull()?.takeIf { it.allowed() }?.let {
-            selectedValue = it.toString(); screen = "day"; calendar = false
+            selectDate(it); screen = "day"; calendar = false
         }; onTargetConsumed() }
     }
     val owner = LocalLifecycleOwner.current
@@ -175,7 +180,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                 if (calendar) CalendarScreen(
                     initial = if (calendarEditor) LocalDate.parse(planned) else selected, today, marked,
                     onMonth = { calendarMonth = it }, onCancel = { calendar = false }, onConfirm = {
-                        if (calendarEditor) planned = it.toString() else selectedValue = it.toString()
+                        if (calendarEditor) planned = it.toString() else selectDate(it)
                         calendar = false
                     }
                 ) else {
@@ -191,17 +196,26 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                     error?.let { message -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Column(Modifier.fillMaxWidth().padding(8.dp)) { Text(message, color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { error = null }) { Text("Закрыть сообщение") } }
                     } }
+                    val dayEntryCard: @Composable (Entry) -> Unit = { entry ->
+                        EntryCard(entry, appearance, onOpen = { openEditor(entry, entry.plannedDate) },
+                            onCompleted = { updateAfterMutation { repository.setCompleted(entry.id, !entry.completed) } })
+                    }
                     when (screen) {
                         "week" -> WeekScreen(selected, today, week, appearance.fontSizeSp, appearance.fontFamily == NoteFontFamily.SERIF, appearance.datePlacement == DatePlacement.INSIDE,
-                            onSelect = { selectedValue = it.toString() }, onDay = { selectedValue = it.toString(); screen = "day" },
-                            onAdd = { openEditor(null, it) }, onCalendar = { calendarEditor = false; calendar = true }, loading = weekLoad.request != weekRequest)
+                            onSelect = ::selectDate, expanded = dayExpanded, entries = day, dayLoading = dayLoad.request != dayRequest,
+                            onToggle = { date ->
+                                dayExpanded = date != selected || !dayExpanded
+                                selectedValue = date.toString()
+                            },
+                            onAdd = { openEditor(null, it) }, onCalendar = { calendarEditor = false; calendar = true },
+                            loading = weekLoad.request != weekRequest, entryContent = dayEntryCard)
                         "day" -> Column(Modifier.fillMaxSize()) {
                             Text(selected.format(fullDate), modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
                             Button(onClick = { openEditor(null, selected) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text("Добавить запись") }
                             if (dayLoad.request != selectedValue) Text("Загрузка…", Modifier.padding(16.dp))
                             else if (day.isEmpty()) Text("Нет записей", Modifier.padding(16.dp))
                             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(day, key = { it.id }) { entry -> EntryCard(entry, appearance, onOpen = { openEditor(entry, selected) }, onCompleted = { updateAfterMutation { repository.setCompleted(entry.id, !entry.completed) } }) }
+                                items(day, key = { it.id }) { entry -> dayEntryCard(entry) }
                             }
                         }
                         "search" -> Column(Modifier.fillMaxSize()) {

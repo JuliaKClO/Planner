@@ -26,7 +26,7 @@ class PlannerSmokeTest {
         check(android.os.Build.FINGERPRINT == "robolectric" || compose.activity.packageName.endsWith(".qa")) {
             "Use -PisolatedTest for device UI tests"
         }
-        compose.waitUntil(15_000) { compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true)).fetchSemanticsNodes().size == 7 }
+        waitForWeek()
     }
 
     private fun waitForText(text: String) {
@@ -54,7 +54,10 @@ class PlannerSmokeTest {
     }
 
     @Test fun sevenDaysCreateSearchAndRecreate() {
-        compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true)).assertCountEquals(7)
+        val week = compose.onNode(hasScrollToIndexAction())
+        val monday = startOfWeek(LocalDate.now())
+        for (offset in 0L..6L) week.performScrollToKey(monday.plusDays(offset).toEpochDay())
+        week.performScrollToKey(monday.toEpochDay())
         compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true))[0].performClick()
         val title = "ОТЧЁТ клиент ${System.nanoTime()}"
         compose.onNodeWithText("Название").performTextInput(title)
@@ -80,7 +83,7 @@ class PlannerSmokeTest {
         compose.onNodeWithText("Введите существующую дату с 01.01.1900 по 31.12.2100").assertExists()
         compose.onNodeWithText("ДД.ММ.ГГГГ").performTextReplacement("29.02.2028")
         compose.onNodeWithText("Перейти").performScrollTo().performClick()
-        compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true)).assertCountEquals(7)
+        compose.onNode(hasContentDescription("вторник, 29 февраля 2028, выбрано", substring = true)).assertExists()
     }
 
     @Test fun calendarChoiceKeepsCivilDateInBothTimeZonesAndStopsAtLimits() {
@@ -100,7 +103,9 @@ class PlannerSmokeTest {
             compose.onNodeWithContentDescription("Следующая неделя").performClick()
             compose.onNode(hasContentDescription("пятница, 31 декабря 2100, выбрано", substring = true)).assertExists()
             compose.onNodeWithContentDescription("Следующая неделя").assertIsNotEnabled()
-            compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true))[6].assertIsNotEnabled()
+            val sunday = hasContentDescription("Добавить запись на воскресенье", substring = true)
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(sunday)
+            compose.onNode(sunday).assertIsNotEnabled()
         } finally { java.util.TimeZone.setDefault(original) }
     }
 
