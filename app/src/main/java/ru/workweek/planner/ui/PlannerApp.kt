@@ -69,7 +69,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     var baseline by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
-    var fieldErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var fieldErrors by rememberSaveable { mutableStateOf<Map<String, String>>(emptyMap()) }
     var exitPrompt by rememberSaveable { mutableStateOf(false) }
     var deletePrompt by rememberSaveable { mutableStateOf(false) }
     var calendar by rememberSaveable { mutableStateOf(false) }
@@ -107,11 +107,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     fun leaveEditor() {
         if (pendingWeek) { selectDate(LocalDate.parse(planned)); screen = "week"; pendingWeek = false } else screen = origin
     }
-    fun closeEditor() {
-        if (busy) return
-        if (fingerprint() != baseline) exitPrompt = true else leaveEditor()
-    }
-    fun save() {
+    fun save(onExit: Boolean = false) {
         if (busy) return
         val parsedTime = if (time.isBlank()) null else runCatching { java.time.LocalTime.parse(time) }.getOrNull()
         val date = runCatching { LocalDate.parse(planned) }.getOrNull()
@@ -121,7 +117,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         if (time.isNotBlank() && (parsedTime == null || !Regex("\\d{2}:\\d{2}").matches(time))) errors["time"] = "Введите время ЧЧ:ММ, от 00:00 до 23:59"
         if (date == null || !date.allowed()) errors["date"] = "Выберите дату с 1900 по 2100 год"
         fieldErrors = errors
-        if (errors.isNotEmpty()) { exitPrompt = false; return }
+        if (errors.isNotEmpty()) { exitPrompt = onExit; return }
         busy = true
         scope.launch {
             try {
@@ -129,9 +125,17 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                 if (origin != "search" && entry.plannedDate != selected) selectDate(entry.plannedDate)
                 leaveEditor(); exitPrompt = false; error = null
                 runCatching { ReminderController.refresh(context) }.onFailure { error = "Запись сохранена. Не удалось восстановить расписание сводки." }
-            } catch (_: Exception) { error = "Не удалось сохранить запись. Данные остались в форме, повторите попытку." }
+            } catch (_: Exception) {
+                error = "Не удалось сохранить запись. Данные остались в форме, повторите попытку."
+                pendingWeek = false
+            }
             finally { busy = false }
         }
+    }
+    fun closeEditor(showWeek: Boolean = false) {
+        if (busy) return
+        pendingWeek = showWeek
+        if (fingerprint() == baseline) leaveEditor() else save(onExit = true)
     }
     fun updateAfterMutation(operation: suspend () -> Unit) {
         scope.launch {
@@ -172,7 +176,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         scope.launch { runCatching { ReminderController.refresh(context) } }
     }
     BackHandler(enabled = !calendar && screen != "week") {
-        when (screen) { "editor" -> { pendingWeek = false; closeEditor() }; "settings" -> screen = settingsOrigin; else -> screen = "week" }
+        when (screen) { "editor" -> closeEditor(); "settings" -> screen = settingsOrigin; else -> screen = "week" }
     }
     PlannerTheme(appearance.theme.name, appearance.accent.name) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -248,18 +252,24 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                         "editor" -> EditorScreen(title, body, planned, time, completed, remind, isNew, busy, fieldErrors,
                             settings.reminder.enabled, appearance,
                             onTitle = { title = it }, onBody = { body = it }, onTime = { time = it }, onCompleted = { completed = it }, onRemind = { remind = it },
-                            onDate = { calendarEditor = true; calendar = true }, onSave = { save() }, onBack = { pendingWeek = false; closeEditor() },
+                            onDate = { calendarEditor = true; calendar = true }, onSave = { save() }, onBack = { closeEditor() },
                             onDelete = { deletePrompt = true }, onSettings = { settingsOrigin = "editor"; screen = "settings" },
-                            onShowWeek = { pendingWeek = true; closeEditor() })
+                            onShowWeek = { closeEditor(showWeek = true) })
                     }
                 }
             }
         }
-        if (exitPrompt) AlertDialog(onDismissRequest = { if (!busy) { exitPrompt = false; pendingWeek = false } }, title = { Text("Сохранить изменения?") }, text = {
-            Column { Button(onClick = { save() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
-                TextButton(onClick = { exitPrompt = false; if (pendingWeek) planned = originalPlanned; leaveEditor() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Не сохранять") }
-                TextButton(onClick = { exitPrompt = false; pendingWeek = false }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Продолжить редактирование") } }
-        }, confirmButton = {})
+        if (exitPrompt) AlertDialog(
+            onDismissRequest = { exitPrompt = false; pendingWeek = false },
+            title = { Text("Не удалось сохранить запись") },
+            text = { Text(fieldErrors.values.joinToString("\n")) },
+            confirmButton = { TextButton(onClick = { exitPrompt = false; pendingWeek = false }) { Text("Продолжить редактирование") } },
+            dismissButton = { TextButton(onClick = {
+                exitPrompt = false
+                if (pendingWeek) planned = originalPlanned
+                leaveEditor()
+            }) { Text("Не сохранять") } }
+        )
         if (deletePrompt) AlertDialog(onDismissRequest = { if (!busy) deletePrompt = false }, title = { Text("Удалить запись?") }, confirmButton = {
             TextButton(onClick = {
                 if (!busy) { busy = true; scope.launch {

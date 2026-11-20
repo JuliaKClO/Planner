@@ -131,13 +131,25 @@ class PlannerSmokeTest {
         compose.onNodeWithContentDescription("Выбрать дату").assertTextEquals(weekLabel(monday))
     }
 
-    @Test fun draftSurvivesRecreationAndDiscardConfirmation() {
+    @Test fun draftSurvivesRecreationAndAutosavesOnBack() {
         val title = "Черновик ${System.nanoTime()}"
         newEntry(title)
         compose.onNodeWithText("Описание").performTextInput("Несохранённые данные 📅")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText(title).assertExists()
         compose.onNodeWithText("Несохранённые данные 📅").assertExists()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        waitForWeek()
+        compose.onNodeWithText("Не удалось сохранить запись").assertDoesNotExist()
+        val rows = runBlocking { EntryRepository(PlannerDatabase.open(compose.activity)).observeSearch(title).first() }
+        assertEquals(1, rows.size)
+        assertEquals("Несохранённые данные 📅", rows.single().body)
+    }
+
+    @Test fun invalidDraftCanBeCorrectedOrDiscarded() {
+        val title = "Невалидный черновик ${System.nanoTime()}"
+        newEntry(title)
+        compose.onNodeWithText("Время ЧЧ:ММ, необязательно").performScrollTo().performTextInput("25:61")
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithText("Продолжить редактирование").performClick()
         compose.onNodeWithText(title).assertExists()
@@ -148,6 +160,29 @@ class PlannerSmokeTest {
         assertEquals(0, rows.size)
     }
 
+    @Test fun editedEntryAutosavesOnCloseAndShowWeek() {
+        val title = "Автосохранение ${System.nanoTime()}"
+        newEntry(title)
+        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        waitForWeek()
+        compose.onNodeWithContentDescription("Открыть поиск").performClick()
+        compose.onNodeWithText("Название или описание").performTextInput(title.lowercase())
+        waitForText(title)
+        compose.onNodeWithText(title).performClick()
+        compose.onNodeWithText("Описание").performTextReplacement("Первое изменение")
+        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        waitForText(title)
+        val repository = EntryRepository(PlannerDatabase.open(compose.activity))
+        val saved = runBlocking { repository.observeSearch(title).first().single() }
+        assertEquals("Первое изменение", saved.body)
+        compose.onNodeWithText(title).performClick()
+        compose.onNodeWithText("Описание").performTextReplacement("Второе изменение")
+        compose.onNodeWithText("Показать в неделе").performScrollTo().performClick()
+        waitForWeek()
+        compose.onNodeWithText("Не удалось сохранить запись").assertDoesNotExist()
+        assertEquals("Второе изменение", runBlocking { repository.get(saved.id) }?.body)
+    }
+
     @Test fun databaseFailurePreservesDraftAndRetryIsIdempotent() {
         val title = "Ошибка базы ${System.nanoTime()}"
         val database = PlannerDatabase.open(compose.activity)
@@ -156,7 +191,7 @@ class PlannerSmokeTest {
             database.openHelper.writableDatabase.execSQL("CREATE TEMP TRIGGER qa_save_failure BEFORE INSERT ON entries BEGIN SELECT RAISE(FAIL, 'controlled QA failure'); END")
         } }
         try {
-            compose.onNodeWithText("Сохранить").performScrollTo().performClick()
+            compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             waitForText("Не удалось сохранить запись. Данные остались в форме, повторите попытку.")
             compose.onNodeWithText(title).assertExists()
         } finally {

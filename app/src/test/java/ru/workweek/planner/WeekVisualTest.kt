@@ -252,7 +252,7 @@ class WeekVisualTest {
         compose.onNodeWithText("Удалить запись?").assertIsDisplayed()
         captureBothThemes("delete-dialog", dialog = true)
         compose.onNodeWithText("Отмена").performClick()
-        compose.onNodeWithText("Название").performScrollTo().performTextReplacement("Исправленный заголовок")
+        compose.onNodeWithText("Название").performScrollTo().performTextReplacement("")
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithText("Продолжить редактирование").assertIsDisplayed()
         captureBothThemes("unsaved-dialog", dialog = true)
