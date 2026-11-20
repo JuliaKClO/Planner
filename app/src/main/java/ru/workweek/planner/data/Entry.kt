@@ -27,16 +27,30 @@ data class Entry(
 data class DaySummary(val date: LocalDate, val count: Int, val first: Entry?)
 data class DayCount(val plannedDate: LocalDate, val count: Int)
 
+val Entry.noteText: String
+    get() = when {
+        title.isEmpty() -> body
+        body.isEmpty() -> title
+        else -> "$title\n$body"
+    }
+
+val Entry.preview: String
+    get() {
+        val line = noteText.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        if (line.codePointCount(0, line.length) <= 160) return line
+        return line.substring(0, line.offsetByCodePoints(0, 159)) + "…"
+    }
+
 object EntryRules {
     private fun unicodeSpace(char: Char): Boolean = char.isWhitespace() || Character.isSpaceChar(char)
     fun cleanTitle(title: String): String = title.replace(Regex("[\\r\\n\\u0085\\u2028\\u2029]"), " ")
         .trim(::unicodeSpace)
 
     fun errors(entry: Entry): Map<String, String> = buildMap {
-        val title = cleanTitle(entry.title)
-        if (title.isEmpty()) put("title", "Введите название")
-        else if (title.codePointCount(0, title.length) > 160) put("title", "Не более 160 символов")
-        if (entry.body.codePointCount(0, entry.body.length) > 10_000) put("body", "Не более 10 000 символов")
+        val text = entry.noteText
+        // Includes the longest legacy title, its separator and the entire legacy body.
+        if (text.all(::unicodeSpace)) put("body", "Введите текст заметки")
+        else if (text.codePointCount(0, text.length) > 10_161) put("body", "Не более 10 161 символа")
         if (!CalendarRules.isSupported(entry.plannedDate)) put("date", "Дата должна быть в пределах 1900–2100")
         if (entry.localTime?.second != null && (entry.localTime.second != 0 || entry.localTime.nano != 0))
             put("time", "Укажите время с точностью до минуты")

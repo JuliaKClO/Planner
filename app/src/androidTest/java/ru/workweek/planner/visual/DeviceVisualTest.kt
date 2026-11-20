@@ -68,7 +68,7 @@ class DeviceVisualTest {
             ui.onNodeWithContentDescription("Открыть поиск").performClick()
             ui.onNode(hasSetTextAction()).performTextInput("ОТЧЕТ")
             ui.waitUntil(15000) {
-                ui.onAllNodesWithText("Согласовать отчёт с клиентом").fetchSemanticsNodes().isNotEmpty()
+                ui.onAllNodesWithText("Согласовать отчёт с клиентом\nСверить сроки и отправить итоговый документ.").fetchSemanticsNodes().isNotEmpty()
             }
             capture("search")
         } finally {

@@ -56,7 +56,7 @@ class RepositoryIntegrationTest {
         assertEquals(saved.createdAtUtc, moved.createdAtUtc)
         assertTrue(repo.observeDay(date).first().isEmpty())
         assertEquals(1, repo.observeDay(date.plusDays(1)).first().size)
-        assertTrue(runCatching { repo.save(moved.copy(title = " ")) }.isFailure)
+        assertTrue(runCatching { repo.save(moved.copy(title = "", body = " ")) }.isFailure)
         assertEquals("Новое дело", repo.get(original.id)!!.title)
     }
 

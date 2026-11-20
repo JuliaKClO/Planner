@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import ru.workweek.planner.data.DigestDelivery
 import ru.workweek.planner.data.Entry
 import ru.workweek.planner.data.ReminderSettings
+import ru.workweek.planner.data.preview
 
 data class DigestAlarm(
     val sendDate: LocalDate,
@@ -131,7 +132,7 @@ class DigestEngine(
         }
 
         fun lines(entries: List<Entry>): List<String> = entries.take(3).map {
-            listOfNotNull(it.localTime?.toString(), it.title).joinToString(" · ")
+            listOfNotNull(it.localTime?.toString(), it.preview).joinToString(" · ")
         } + if (entries.size > 3) listOf("И ещё ${entries.size - 3}") else emptyList()
     }
 }

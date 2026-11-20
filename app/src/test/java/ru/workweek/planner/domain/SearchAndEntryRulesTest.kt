@@ -5,6 +5,8 @@ import org.junit.Assert.*
 import org.junit.Test
 import ru.workweek.planner.data.Entry
 import ru.workweek.planner.data.EntryRules
+import ru.workweek.planner.data.noteText
+import ru.workweek.planner.data.preview
 
 class SearchAndEntryRulesTest {
     @Test fun SEARCH_01_russianNormalizationAndAndMatching() {
@@ -33,8 +35,11 @@ class SearchAndEntryRulesTest {
     @Test fun DATA_02_unicodeValidationDoesNotTruncate() {
         val entry = Entry(title = "📚".repeat(160), plannedDate = LocalDate.of(2026, 11, 20))
         assertTrue(EntryRules.errors(entry).isEmpty())
-        assertTrue(EntryRules.errors(entry.copy(title = entry.title + "📚")).containsKey("title"))
-        assertTrue(EntryRules.errors(entry.copy(title = "\u00A0\u2003")).containsKey("title"))
+        assertTrue(EntryRules.errors(entry.copy(title = entry.title + "📚")).isEmpty())
+        assertTrue(EntryRules.errors(entry.copy(title = "\u00A0\u2003")).containsKey("body"))
+        val unified = entry.copy(title = "", body = "\nСписок\nПервый пункт")
+        assertEquals(unified.body, unified.noteText)
+        assertEquals("Список", unified.preview)
         assertTrue(EntryRules.errors(entry.copy(body = "я".repeat(10_000))).isEmpty())
         assertTrue(EntryRules.errors(entry.copy(body = "я".repeat(10_001))).containsKey("body"))
         assertEquals("Сдать отчёт завтра", EntryRules.cleanTitle("\u00A0Сдать\nотчёт\u2028завтра\u00A0"))

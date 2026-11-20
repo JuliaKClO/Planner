@@ -27,20 +27,17 @@ internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () 
             })
             Surface(onClick = onOpen, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(entry.title, fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif, fontSize = appearance.fontSizeSp.sp)
+                    Text(
+                        text = if (search) searchSnippet(entry.noteText, query) else entry.noteText,
+                        fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif,
+                        fontSize = appearance.fontSizeSp.sp
+                    )
                     val metadata = buildList {
                         if (appearance.datePlacement == DatePlacement.INSIDE) add(entry.plannedDate.format(dateFormat))
                         entry.localTime?.let { add(it.toString()) }
                         if (entry.completed) add("Выполнено")
                     }.joinToString(" · ")
                     if (metadata.isNotEmpty()) Text(metadata, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (entry.body.isNotBlank()) {
-                        Text(
-                            text = if (search) searchSnippet(entry.body, query) else entry.body,
-                            fontSize = appearance.fontSizeSp.sp,
-                            fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif
-                        )
-                    }
                 }
             }
         }
@@ -69,9 +66,9 @@ internal fun searchSnippet(body: String, query: String): String {
 
 @Composable
 internal fun EditorScreen(
-    title: String, body: String, planned: String, time: String, completed: Boolean, remind: Boolean,
+    noteText: String, planned: String, time: String, completed: Boolean, remind: Boolean,
     isNew: Boolean, busy: Boolean, errors: Map<String, String>, reminderEnabled: Boolean, appearance: AppearanceSettings,
-    onTitle: (String) -> Unit, onBody: (String) -> Unit, onTime: (String) -> Unit,
+    onNoteText: (String) -> Unit, onTime: (String) -> Unit,
     onCompleted: (Boolean) -> Unit, onRemind: (Boolean) -> Unit, onDate: () -> Unit,
     onSave: () -> Unit, onBack: () -> Unit, onDelete: () -> Unit, onSettings: () -> Unit, onShowWeek: () -> Unit
 ) {
@@ -80,10 +77,8 @@ internal fun EditorScreen(
     LaunchedEffect(Unit) { if (isNew) focus.requestFocus() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(if (isNew) "Новая запись" else "Редактирование", style = MaterialTheme.typography.headlineSmall)
-        OutlinedTextField(title, { onTitle(it.replace(Regex("[\\r\\n\\u2028\\u2029]+"), " ")) }, label = { Text("Название") }, textStyle = style,
-            enabled = !busy, modifier = Modifier.fillMaxWidth().focusRequester(focus), isError = errors.containsKey("title"), supportingText = { errors["title"]?.let { Text(it) } })
-        OutlinedTextField(body, onBody, label = { Text("Описание") }, textStyle = style, minLines = 4,
-            enabled = !busy, modifier = Modifier.fillMaxWidth(), isError = errors.containsKey("body"), supportingText = { errors["body"]?.let { Text(it) } })
+        OutlinedTextField(noteText, onNoteText, label = { Text("Текст заметки") }, textStyle = style, minLines = 6,
+            enabled = !busy, modifier = Modifier.fillMaxWidth().focusRequester(focus), isError = errors.containsKey("body"), supportingText = { errors["body"]?.let { Text(it) } })
         OutlinedButton(onClick = onDate, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Дата · ${LocalDate.parse(planned).format(dateFormat)}") }
         errors["date"]?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         OutlinedTextField(time, onTime, label = { Text("Время ЧЧ:ММ, необязательно") }, enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth(),

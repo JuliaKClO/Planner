@@ -10,6 +10,7 @@ import org.junit.runner.RunWith
 import ru.workweek.planner.MainActivity
 import ru.workweek.planner.data.EntryRepository
 import ru.workweek.planner.data.PlannerDatabase
+import ru.workweek.planner.data.Entry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -45,7 +46,7 @@ class PlannerSmokeTest {
 
     private fun newEntry(title: String) {
         compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true))[0].performClick()
-        compose.onNodeWithText("Название").performTextInput(title)
+        compose.onNodeWithText("Текст заметки").performTextInput(title)
     }
 
     private fun saveEntry() {
@@ -60,18 +61,18 @@ class PlannerSmokeTest {
         week.performScrollToKey(monday.toEpochDay())
         compose.onAllNodes(hasContentDescription("Добавить запись на", substring = true))[0].performClick()
         val title = "ОТЧЁТ клиент ${System.nanoTime()}"
-        compose.onNodeWithText("Название").performTextInput(title)
-        compose.onNodeWithText("Описание").performTextInput("Договор и emoji 📅")
+        val note = "$title\nДоговор и emoji 📅"
+        compose.onNodeWithText("Текст заметки").performTextInput(note)
         compose.onNodeWithText("Сохранить").performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Открыть поиск").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Открыть поиск").performClick()
-        compose.onNodeWithText("Название или описание").performTextInput(title.lowercase().replace('ё', 'е'))
-        compose.waitUntil(10_000) { compose.onAllNodesWithText(title).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(title).assertIsDisplayed().performClick()
-        compose.onNodeWithText("Название").assertExists()
+        compose.onNodeWithText("Поиск по тексту").performTextInput(title.lowercase().replace('ё', 'е'))
+        waitForText(note)
+        compose.onNodeWithText(note).assertIsDisplayed().performClick()
+        compose.onNodeWithText("Текст заметки").assertExists()
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("Название").assertExists()
-        compose.onNodeWithText(title).assertExists()
+        compose.onNodeWithText("Текст заметки").assertExists()
+        compose.onNodeWithText(note).assertExists()
     }
 
     @Test fun invalidCalendarDateRemainsEditable() {
@@ -134,16 +135,17 @@ class PlannerSmokeTest {
     @Test fun draftSurvivesRecreationAndAutosavesOnBack() {
         val title = "Черновик ${System.nanoTime()}"
         newEntry(title)
-        compose.onNodeWithText("Описание").performTextInput("Несохранённые данные 📅")
+        val note = "$title\nНесохранённые данные 📅"
+        compose.onNodeWithText("Текст заметки").performTextReplacement(note)
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText(title).assertExists()
-        compose.onNodeWithText("Несохранённые данные 📅").assertExists()
+        compose.onNodeWithText(note).assertExists()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         waitForWeek()
         compose.onNodeWithText("Не удалось сохранить запись").assertDoesNotExist()
         val rows = runBlocking { EntryRepository(PlannerDatabase.open(compose.activity)).observeSearch(title).first() }
         assertEquals(1, rows.size)
-        assertEquals("Несохранённые данные 📅", rows.single().body)
+        assertEquals("", rows.single().title)
+        assertEquals(note, rows.single().body)
     }
 
     @Test fun invalidDraftCanBeCorrectedOrDiscarded() {
@@ -160,27 +162,57 @@ class PlannerSmokeTest {
         assertEquals(0, rows.size)
     }
 
+    @Test fun legacyTitleAndBodyBecomeOneEditableNoteWithoutDuplication() {
+        val token = "Старая заметка ${System.nanoTime()}"
+        val repository = EntryRepository(PlannerDatabase.open(compose.activity))
+        val legacy = Entry(title = token, body = "Первая строка\nВторая строка 📅", plannedDate = LocalDate.now())
+        runBlocking { repository.save(legacy) }
+        compose.onNodeWithContentDescription("Открыть поиск").performClick()
+        compose.onNodeWithText("Поиск по тексту").performTextInput(token)
+        val original = "$token\n${legacy.body}"
+        waitForText(original)
+        compose.onNodeWithText(original).performClick()
+        compose.onAllNodes(hasSetTextAction() and hasText("Текст заметки")).assertCountEquals(1)
+        compose.onNodeWithText("Название").assertDoesNotExist()
+        compose.onNodeWithText("Описание").assertDoesNotExist()
+        compose.onNodeWithText(original).assertExists()
+        val edited = "$original\nДобавленная строка"
+        compose.onNodeWithText("Текст заметки").performTextReplacement(edited)
+        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        waitForText(edited)
+        val saved = runBlocking { repository.get(legacy.id) }!!
+        assertEquals("", saved.title)
+        assertEquals(edited, saved.body)
+        compose.onNodeWithText(edited).performClick()
+        compose.onNodeWithText(edited).assertExists()
+        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        waitForText(edited)
+        assertEquals(edited, runBlocking { repository.get(legacy.id) }?.body)
+    }
+
     @Test fun editedEntryAutosavesOnCloseAndShowWeek() {
         val title = "Автосохранение ${System.nanoTime()}"
         newEntry(title)
         compose.onNodeWithText("Закрыть").performScrollTo().performClick()
         waitForWeek()
         compose.onNodeWithContentDescription("Открыть поиск").performClick()
-        compose.onNodeWithText("Название или описание").performTextInput(title.lowercase())
+        compose.onNodeWithText("Поиск по тексту").performTextInput(title.lowercase())
         waitForText(title)
         compose.onNodeWithText(title).performClick()
-        compose.onNodeWithText("Описание").performTextReplacement("Первое изменение")
+        val firstChange = "$title\nПервое изменение"
+        compose.onNodeWithText("Текст заметки").performTextReplacement(firstChange)
         compose.onNodeWithText("Закрыть").performScrollTo().performClick()
-        waitForText(title)
+        waitForText(firstChange)
         val repository = EntryRepository(PlannerDatabase.open(compose.activity))
         val saved = runBlocking { repository.observeSearch(title).first().single() }
-        assertEquals("Первое изменение", saved.body)
-        compose.onNodeWithText(title).performClick()
-        compose.onNodeWithText("Описание").performTextReplacement("Второе изменение")
+        assertEquals(firstChange, saved.body)
+        compose.onNodeWithText(firstChange).performClick()
+        val secondChange = "$title\nВторое изменение"
+        compose.onNodeWithText("Текст заметки").performTextReplacement(secondChange)
         compose.onNodeWithText("Показать в неделе").performScrollTo().performClick()
         waitForWeek()
         compose.onNodeWithText("Не удалось сохранить запись").assertDoesNotExist()
-        assertEquals("Второе изменение", runBlocking { repository.get(saved.id) }?.body)
+        assertEquals(secondChange, runBlocking { repository.get(saved.id) }?.body)
     }
 
     @Test fun databaseFailurePreservesDraftAndRetryIsIdempotent() {
@@ -210,18 +242,18 @@ class PlannerSmokeTest {
         newEntry(token)
         saveEntry()
         compose.onNodeWithContentDescription("Открыть поиск").performClick()
-        compose.onNodeWithText("Название или описание").performTextInput("НесуществующийПервыйЗапрос")
-        compose.onNodeWithText("Название или описание").performTextReplacement(token.lowercase())
+        compose.onNodeWithText("Поиск по тексту").performTextInput("НесуществующийПервыйЗапрос")
+        compose.onNodeWithText("Поиск по тексту").performTextReplacement(token.lowercase())
         waitForText(token)
         compose.onNodeWithText(token).performClick()
-        compose.onNodeWithText("Название").performTextReplacement("$token изменено")
+        compose.onNodeWithText("Текст заметки").performTextReplacement("$token изменено")
         compose.onNodeWithText("Сохранить").performScrollTo().performClick()
         waitForText("$token изменено")
         compose.onNodeWithText(token.lowercase()).assertExists()
         compose.onNodeWithText("$token изменено").performClick()
         compose.onNodeWithText("Удалить запись").performScrollTo().performClick()
         compose.onNodeWithText("Отмена").performClick()
-        compose.onNodeWithText("Название").assertExists()
+        compose.onNodeWithText("Текст заметки").assertExists()
         compose.onNodeWithText("Удалить запись").performScrollTo().performClick()
         compose.onNodeWithText("Удалить", useUnmergedTree = true).performClick()
         waitForText("Ничего не найдено")

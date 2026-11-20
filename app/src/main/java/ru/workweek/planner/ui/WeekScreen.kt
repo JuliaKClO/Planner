@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import ru.workweek.planner.domain.CalendarRules
 import ru.workweek.planner.data.DaySummary
 import ru.workweek.planner.data.Entry
+import ru.workweek.planner.data.preview
 import ru.workweek.planner.data.AppearanceSettings
 import ru.workweek.planner.data.DatePlacement
 import ru.workweek.planner.data.NoteFontFamily
@@ -168,7 +169,7 @@ internal fun WeekScreen(
                                             if (current) Text("Сегодня", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                         }
                                         Column(Modifier.weight(1f)) {
-                                            Text(if (open) "Свернуть" else first?.title ?: if (loading) "Загрузка…" else "Нет записей", fontSize = appearance.fontSizeSp.sp,
+                                            Text(if (open) "Свернуть" else first?.preview ?: if (loading) "Загрузка…" else "Нет записей", fontSize = appearance.fontSizeSp.sp,
                                                 fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif,
                                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                                 color = if (first == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)

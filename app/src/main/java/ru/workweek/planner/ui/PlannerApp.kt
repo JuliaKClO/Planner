@@ -57,8 +57,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     var settingsOrigin by rememberSaveable { mutableStateOf("week") }
     var pendingWeek by rememberSaveable { mutableStateOf(false) }
     var draftId by rememberSaveable { mutableStateOf("") }
-    var title by rememberSaveable { mutableStateOf("") }
-    var body by rememberSaveable { mutableStateOf("") }
+    var noteText by rememberSaveable { mutableStateOf("") }
     var planned by rememberSaveable { mutableStateOf(selectedValue) }
     var originalPlanned by rememberSaveable { mutableStateOf(selectedValue) }
     var time by rememberSaveable { mutableStateOf("") }
@@ -93,11 +92,11 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         selectedValue = date.toString()
         dayExpanded = false
     }
-    fun fingerprint() = listOf(title, body, planned, time, completed.toString(), remind.toString()).joinToString("\u0000")
+    fun fingerprint() = listOf(noteText, planned, time, completed.toString(), remind.toString()).joinToString("\u0000")
     fun openEditor(entry: Entry?, date: LocalDate) {
         origin = screen
         draftId = entry?.id ?: UUID.randomUUID().toString()
-        title = entry?.title.orEmpty(); body = entry?.body.orEmpty()
+        noteText = entry?.noteText.orEmpty()
         planned = (entry?.plannedDate ?: date).toString(); time = entry?.localTime?.toString().orEmpty()
         originalPlanned = planned; pendingWeek = false
         completed = entry?.completed ?: false; remind = entry?.remindOnPreviousDay ?: true
@@ -111,7 +110,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         if (busy) return
         val parsedTime = if (time.isBlank()) null else runCatching { java.time.LocalTime.parse(time) }.getOrNull()
         val date = runCatching { LocalDate.parse(planned) }.getOrNull()
-        val entry = Entry(id = draftId, title = title, body = body, plannedDate = date ?: selected,
+        val entry = Entry(id = draftId, title = "", body = noteText, plannedDate = date ?: selected,
             localTime = parsedTime, completed = completed, remindOnPreviousDay = remind, createdAtUtc = Instant.parse(created))
         val errors = EntryRules.errors(entry).toMutableMap()
         if (time.isNotBlank() && (parsedTime == null || !Regex("\\d{2}:\\d{2}").matches(time))) errors["time"] = "Введите время ЧЧ:ММ, от 00:00 до 23:59"
@@ -223,7 +222,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                             }
                         }
                         "search" -> Column(Modifier.fillMaxSize()) {
-                            OutlinedTextField(query, { query = it }, label = { Text("Название или описание") }, modifier = Modifier.fillMaxWidth().padding(12.dp))
+                            OutlinedTextField(query, { query = it }, label = { Text("Поиск по тексту") }, modifier = Modifier.fillMaxWidth().padding(12.dp))
                             if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Очистить поиск") }
                             if (query.isBlank()) Text("Введите текст для поиска", Modifier.padding(16.dp))
                             else if (searchQuery != query || searchLoad.request != searchRequest) Text("Поиск…", Modifier.padding(16.dp))
@@ -249,9 +248,9 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                                 runCatching { ReminderController.update(context, enabled, deliveryTime) }.onFailure { error = "Не удалось сохранить настройки сводки." }
                                 if (requestPermission) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } }, onSystemSettings = { ReminderController.openSystemSettings(context) })
-                        "editor" -> EditorScreen(title, body, planned, time, completed, remind, isNew, busy, fieldErrors,
+                        "editor" -> EditorScreen(noteText, planned, time, completed, remind, isNew, busy, fieldErrors,
                             settings.reminder.enabled, appearance,
-                            onTitle = { title = it }, onBody = { body = it }, onTime = { time = it }, onCompleted = { completed = it }, onRemind = { remind = it },
+                            onNoteText = { noteText = it }, onTime = { time = it }, onCompleted = { completed = it }, onRemind = { remind = it },
                             onDate = { calendarEditor = true; calendar = true }, onSave = { save() }, onBack = { closeEditor() },
                             onDelete = { deletePrompt = true }, onSettings = { settingsOrigin = "editor"; screen = "settings" },
                             onShowWeek = { closeEditor(showWeek = true) })

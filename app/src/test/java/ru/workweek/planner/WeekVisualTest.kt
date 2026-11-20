@@ -188,20 +188,22 @@ class WeekVisualTest {
         }
         compose.waitUntil(15000) { compose.onAllNodesWithText("Встреча").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Пн ${monday.dayOfMonth}").performClick()
-        compose.waitUntil(15000) { compose.onAllNodesWithText(agenda).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(agenda).assertIsDisplayed()
+        val mondayNote = "Встреча\n$agenda"
+        compose.waitUntil(15000) { compose.onAllNodesWithText(mondayNote).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(mondayNote).assertIsDisplayed()
         capture("week-expanded-monday")
         val tuesdayHeader = compose.onNodeWithText("Вт ${tuesday.dayOfMonth}")
         tuesdayHeader.performScrollTo().performClick()
-        compose.waitUntil(15000) { compose.onAllNodesWithText("Итоги вторника").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Итоги вторника").assertIsDisplayed()
-        compose.onNodeWithText(agenda).assertDoesNotExist()
+        val tuesdayNote = "Отчёт\nИтоги вторника"
+        compose.waitUntil(15000) { compose.onAllNodesWithText(tuesdayNote).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(tuesdayNote).assertIsDisplayed()
+        compose.onNodeWithText(mondayNote).assertDoesNotExist()
         compose.onNode(hasContentDescription("Добавить запись на вторник", substring = true)).performClick()
         compose.onNodeWithText("Новая запись").assertExists()
         compose.onNodeWithText("Дата · ${tuesday.format(ru.workweek.planner.ui.dateFormat)}").assertExists()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         tuesdayHeader.performClick()
-        compose.onNodeWithText("Итоги вторника").assertDoesNotExist()
+        compose.onNodeWithText(tuesdayNote).assertDoesNotExist()
         compose.onNodeWithText("Рабочая неделя").assertIsDisplayed()
     }
 
@@ -212,6 +214,7 @@ class WeekVisualTest {
         val date = LocalDate.now()
         val longTitle = "Подготовить подробный отчёт к встрече ".repeat(4).trim()
         val body = "Сверить таблицу и согласовать сроки.\n".repeat(230) + "Последняя строка 📅"
+        val note = "$longTitle\n$body"
         runBlocking {
             repeat(20) { i ->
                 repo.save(Entry(id = "day-$i", title = if (i == 19) longTitle else "Рабочая встреча №$i",
@@ -230,21 +233,20 @@ class WeekVisualTest {
         captureBothThemes("day")
         val dayList = compose.onNode(hasScrollToIndexAction())
         dayList.performScrollToKey("day-19")
-        val description = compose.onNodeWithText(body, useUnmergedTree = true)
+        val description = compose.onNodeWithText(note, useUnmergedTree = true)
         description.assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
         description.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         val layout = layouts.single()
-        assertEquals(body.length, layout.getLineEnd(layout.lineCount - 1))
+        assertEquals(note.length, layout.getLineEnd(layout.lineCount - 1))
         capture("day-long-entry")
         dayList.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, layout.size.height.toFloat()) }
         description.assertIsDisplayed()
         assertTrue(description.getUnclippedBoundsInRoot().bottom <= dayList.getUnclippedBoundsInRoot().bottom)
         capture("day-last-lines")
         dayList.performScrollToKey("day-19")
-        compose.onNodeWithText(longTitle).assertIsDisplayed().performClick()
-        compose.onNodeWithText(longTitle).assertExists()
-        compose.onNodeWithText(body).assertExists()
+        compose.onNodeWithText(note).assertIsDisplayed().performClick()
+        compose.onNodeWithText(note).assertExists()
         captureBothThemes("editor")
         compose.onNodeWithText("Дата ·", substring = true).performScrollTo().assertIsDisplayed()
         capture("editor-last-lines")
@@ -252,12 +254,12 @@ class WeekVisualTest {
         compose.onNodeWithText("Удалить запись?").assertIsDisplayed()
         captureBothThemes("delete-dialog", dialog = true)
         compose.onNodeWithText("Отмена").performClick()
-        compose.onNodeWithText("Название").performScrollTo().performTextReplacement("")
+        compose.onNodeWithText("Текст заметки").performScrollTo().performTextReplacement("")
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithText("Продолжить редактирование").assertIsDisplayed()
         captureBothThemes("unsaved-dialog", dialog = true)
         compose.onNodeWithText("Продолжить редактирование").performClick()
-        compose.onNodeWithText("Название").performTextReplacement(longTitle)
+        compose.onNodeWithText("Текст заметки").performTextReplacement(note)
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithText("Свернуть").performClick()
         compose.onNodeWithContentDescription("Выбрать дату").performClick()
@@ -394,7 +396,7 @@ class WeekVisualTest {
         capture("week-dark")
         compose.onNodeWithContentDescription("Открыть поиск").performClick()
         compose.onNode(hasSetTextAction()).performTextInput("ОТЧЕТ")
-        compose.waitUntil(15000) { compose.onAllNodesWithText("Согласовать отчёт с клиентом").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15000) { compose.onAllNodesWithText("Согласовать отчёт с клиентом\nСверить итоги перед отправкой.").fetchSemanticsNodes().isNotEmpty() }
         capture("search")
         compose.onNodeWithContentDescription("Назад").performClick()
         compose.onNodeWithContentDescription("Выбрать дату").performClick()
