@@ -2,8 +2,10 @@ package ru.workweek.planner
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import android.content.Context
 import java.io.File
@@ -133,7 +135,20 @@ class WeekVisualTest {
         compose.onNodeWithText("Ещё 19", substring = true).performClick()
         compose.onNodeWithText("Добавить запись").assertExists()
         captureBothThemes("day")
-        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(19)
+        val dayList = compose.onNode(hasScrollToIndexAction())
+        dayList.performScrollToIndex(19)
+        val description = compose.onNodeWithText(body, useUnmergedTree = true)
+        description.assertIsDisplayed()
+        val layouts = mutableListOf<TextLayoutResult>()
+        description.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertEquals(body.length, layout.getLineEnd(layout.lineCount - 1))
+        capture("day-long-entry")
+        dayList.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, layout.size.height.toFloat()) }
+        description.assertIsDisplayed()
+        assertTrue(description.getUnclippedBoundsInRoot().bottom <= dayList.getUnclippedBoundsInRoot().bottom)
+        capture("day-last-lines")
+        dayList.performScrollToIndex(19)
         compose.onNodeWithText(longTitle).assertIsDisplayed().performClick()
         compose.onNodeWithText(longTitle).assertExists()
         compose.onNodeWithText(body).assertExists()

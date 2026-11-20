@@ -34,7 +34,13 @@ internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () 
                         if (entry.completed) add("Выполнено")
                     }.joinToString(" · ")
                     if (metadata.isNotEmpty()) Text(metadata, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (search && entry.body.isNotBlank()) Text(searchSnippet(entry.body, query), fontSize = appearance.fontSizeSp.sp, fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif)
+                    if (entry.body.isNotBlank()) {
+                        Text(
+                            text = if (search) searchSnippet(entry.body, query) else entry.body,
+                            fontSize = appearance.fontSizeSp.sp,
+                            fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif
+                        )
+                    }
                 }
             }
         }
