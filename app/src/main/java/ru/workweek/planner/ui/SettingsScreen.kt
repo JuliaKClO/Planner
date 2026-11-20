@@ -1,6 +1,8 @@
 package ru.workweek.planner.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
@@ -29,6 +31,39 @@ private fun <T> Choice(title: String, values: List<Pair<T, String>>, selected: T
             }
         }
     }
+}
+
+@Composable
+private fun WeekColorChoice(title: String, selected: WeekColor, theme: Theme, onSelect: (WeekColor) -> Unit) {
+    var choosing by rememberSaveable { mutableStateOf(false) }
+    val dark = theme == Theme.DARK || (theme == Theme.SYSTEM && isSystemInDarkTheme())
+    OutlinedButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) {
+        Box(Modifier.size(20.dp).background(selected.color(dark), androidx.compose.foundation.shape.CircleShape))
+        Text("$title · ${selected.label}", modifier = Modifier.weight(1f).padding(start = 12.dp))
+    }
+    if (choosing) AlertDialog(
+        onDismissRequest = { choosing = false },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                WeekColor.entries.forEach { color ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .selectable(selected = color == selected, role = Role.RadioButton, onClick = {
+                                onSelect(color)
+                                choosing = false
+                            }),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = color == selected, onClick = null)
+                        Box(Modifier.padding(horizontal = 8.dp).size(20.dp).background(color.color(dark), androidx.compose.foundation.shape.CircleShape))
+                        Text(color.label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { choosing = false }) { Text("Закрыть") } }
+    )
 }
 
 @Composable
@@ -69,6 +104,10 @@ internal fun SettingsScreen(settings: Settings, status: String, reminderError: S
         Choice("Размер текста", listOf(14 to "14 sp", 16 to "16 sp", 18 to "18 sp"), a.fontSizeSp) { onAppearance(a.copy(fontSizeSp = it)) }
         Choice("Дата записи", listOf(DatePlacement.SEPARATE to "Отдельно в заголовке", DatePlacement.INSIDE to "Внутри карточки"), a.datePlacement) { onAppearance(a.copy(datePlacement = it)) }
         Choice("Акцент", listOf(Accent.BLUE to "Синий", Accent.TEAL to "Бирюзовый", Accent.PURPLE to "Фиолетовый", Accent.AMBER to "Янтарный"), a.accent) { onAppearance(a.copy(accent = it)) }
+        Text("Цвета недель", style = MaterialTheme.typography.titleMedium)
+        WeekColorChoice("Прошлые недели", a.pastWeekColor, a.theme) { onAppearance(a.copy(pastWeekColor = it)) }
+        WeekColorChoice("Текущая неделя", a.currentWeekColor, a.theme) { onAppearance(a.copy(currentWeekColor = it)) }
+        WeekColorChoice("Будущие недели", a.futureWeekColor, a.theme) { onAppearance(a.copy(futureWeekColor = it)) }
         OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) { Text("Сбросить оформление") }
     }
 }

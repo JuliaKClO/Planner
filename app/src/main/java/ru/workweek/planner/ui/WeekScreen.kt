@@ -2,6 +2,7 @@ package ru.workweek.planner.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -25,6 +29,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import ru.workweek.planner.domain.CalendarRules
 import ru.workweek.planner.data.DaySummary
 import ru.workweek.planner.data.Entry
+import ru.workweek.planner.data.AppearanceSettings
+import ru.workweek.planner.data.DatePlacement
+import ru.workweek.planner.data.NoteFontFamily
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -80,19 +87,27 @@ internal fun Action(symbol: String, label: String, enabled: Boolean = true, onCl
 
 @Composable
 internal fun WeekScreen(
-    selected: LocalDate, today: LocalDate, days: List<DaySummary>, fontSize: Int,
-    serif: Boolean, insideDate: Boolean, onSelect: (LocalDate) -> Unit,
+    selected: LocalDate, today: LocalDate, days: List<DaySummary>, appearance: AppearanceSettings,
+    onSelect: (LocalDate) -> Unit,
     expanded: Boolean, entries: List<Entry>, dayLoading: Boolean, onToggle: (LocalDate) -> Unit,
     onAdd: (LocalDate) -> Unit, onCalendar: () -> Unit, loading: Boolean,
     entryContent: @Composable (Entry) -> Unit
 ) {
     val start = startOfWeek(selected)
     val end = start.plusDays(6)
+    val currentWeek = startOfWeek(today)
+    val weekColor = when {
+        start < currentWeek -> appearance.pastWeekColor
+        start > currentWeek -> appearance.futureWeekColor
+        else -> appearance.currentWeekColor
+    }
+    val background = MaterialTheme.colorScheme.background
+    val indicator = weekColor.color(background.luminance() < 0.5f)
     val large = LocalDensity.current.fontScale > 1.1f
     val shift: (Int) -> Unit = { amount ->
         onSelect(CalendarRules.moveWeek(selected, amount))
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(lerp(background, indicator, 0.10f))) {
         if (large) {
             TextButton(onClick = onCalendar, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Выбрать дату" }) { Text("${start.format(dateFormat)} — ${end.format(dateFormat)}") }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -111,6 +126,7 @@ internal fun WeekScreen(
                 TextButton(onClick = { onSelect(bounded(today)) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Сегодня") }
             }
         }
+        Spacer(Modifier.fillMaxWidth().height(3.dp).background(indicator).testTag("week-color-indicator"))
         var drag by remember { mutableFloatStateOf(0f) }
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
             val rowMinimum = ((maxHeight - 32.dp) / 7).coerceAtLeast(56.dp)
@@ -152,14 +168,14 @@ internal fun WeekScreen(
                                             if (current) Text("Сегодня", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                         }
                                         Column(Modifier.weight(1f)) {
-                                            Text(if (open) "Свернуть" else first?.title ?: if (loading) "Загрузка…" else "Нет записей", fontSize = fontSize.sp,
-                                                fontFamily = if (serif) FontFamily.Serif else FontFamily.SansSerif,
+                                            Text(if (open) "Свернуть" else first?.title ?: if (loading) "Загрузка…" else "Нет записей", fontSize = appearance.fontSizeSp.sp,
+                                                fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif,
                                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                                 color = if (first == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                                             if (!open && first != null) {
                                                 val metadata = buildList {
                                                     first.localTime?.let { add(it.toString()) }
-                                                    if (insideDate) add(date.format(shortDate))
+                                                    if (appearance.datePlacement == DatePlacement.INSIDE) add(date.format(shortDate))
                                                     if (first.completed) add("✓")
                                                     if (count > 1) add("Ещё ${count - 1}")
                                                 }.joinToString(" · ")

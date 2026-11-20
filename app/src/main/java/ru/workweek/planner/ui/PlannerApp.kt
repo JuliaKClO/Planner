@@ -201,7 +201,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                             onCompleted = { updateAfterMutation { repository.setCompleted(entry.id, !entry.completed) } })
                     }
                     when (screen) {
-                        "week" -> WeekScreen(selected, today, week, appearance.fontSizeSp, appearance.fontFamily == NoteFontFamily.SERIF, appearance.datePlacement == DatePlacement.INSIDE,
+                        "week" -> WeekScreen(selected, today, week, appearance,
                             onSelect = ::selectDate, expanded = dayExpanded, entries = day, dayLoading = dayLoad.request != dayRequest,
                             onToggle = { date ->
                                 dayExpanded = date != selected || !dayExpanded

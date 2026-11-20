@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.graphics.toArgb
 import androidx.test.core.app.ApplicationProvider
 import android.content.Context
 import java.io.File
@@ -118,23 +119,83 @@ class WeekVisualTest {
         }
     }
 
+    @Test fun weekColorsFollowNavigationAndSurviveRecreation() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsRepository(context)
+        val palette = WeekColor.entries
+        val appearance = AppearanceSettings(
+            theme = Theme.LIGHT,
+            pastWeekColor = palette[0],
+            currentWeekColor = palette[1],
+            futureWeekColor = palette[2]
+        )
+        fun waitForIndicator(color: WeekColor, dark: Boolean) {
+            compose.waitUntil(10000) {
+                var actual = 0
+                val center = compose.onNodeWithTag("week-color-indicator").fetchSemanticsNode().boundsInRoot.center
+                compose.runOnIdle {
+                    val view = compose.activity.window.decorView
+                    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                    view.draw(Canvas(bitmap))
+                    actual = bitmap.getPixel(center.x.toInt(), center.y.toInt())
+                    bitmap.recycle()
+                }
+                actual == color.color(dark).toArgb()
+            }
+        }
+        for (theme in listOf(Theme.LIGHT, Theme.DARK)) {
+            runBlocking { settings.updateAppearance(appearance.copy(theme = theme)) }
+            val dark = theme == Theme.DARK
+            if (dark) compose.onNodeWithText("Сегодня").performClick()
+            waitForIndicator(appearance.currentWeekColor, dark)
+            capture("week-colors-current-${theme.name.lowercase()}")
+            compose.onNodeWithContentDescription("Предыдущая неделя").performClick()
+            waitForIndicator(appearance.pastWeekColor, dark)
+            capture("week-colors-past-${theme.name.lowercase()}")
+            compose.onNodeWithContentDescription("Следующая неделя").performClick()
+            compose.onNodeWithContentDescription("Следующая неделя").performClick()
+            waitForIndicator(appearance.futureWeekColor, dark)
+            capture("week-colors-future-${theme.name.lowercase()}")
+        }
+        compose.activityRule.scenario.recreate()
+        waitForWeek()
+        waitForIndicator(appearance.futureWeekColor, true)
+        val restored = runBlocking { settings.settings.first().appearance }
+        assertEquals(appearance.copy(theme = Theme.DARK), restored)
+        runBlocking { settings.resetAppearance() }
+        compose.onNodeWithText("Сегодня").performClick()
+        val defaults = runBlocking { settings.settings.first().appearance }
+        assertEquals(AppearanceSettings(), defaults)
+        compose.onNodeWithContentDescription("Открыть настройки").performClick()
+        compose.onNodeWithText("Прошлые недели · ${defaults.pastWeekColor.label}").performScrollTo().performClick()
+        compose.onNodeWithText(palette.last().label).performClick()
+        compose.waitUntil(10000) {
+            runBlocking { settings.settings.first().appearance.pastWeekColor } == palette.last()
+        }
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Прошлые недели · ${palette.last().label}").performScrollTo().assertIsDisplayed()
+        capture("week-colors-settings")
+    }
+
     @Test fun switchingExpandedDaysKeepsAddOnTheSelectedDate() {
         val repo = EntryRepository(PlannerDatabase.open(compose.activity))
         val monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
         val tuesday = monday.plusDays(1)
+        val agenda = "Обсудить сроки поставки, уточнить адрес и согласовать время следующей встречи."
         runBlocking {
-            repo.save(Entry(title = "Встреча", body = "Повестка понедельника", plannedDate = monday))
+            repo.save(Entry(title = "Встреча", body = agenda, plannedDate = monday))
             repo.save(Entry(title = "Отчёт", body = "Итоги вторника", plannedDate = tuesday))
         }
         compose.waitUntil(15000) { compose.onAllNodesWithText("Встреча").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Пн ${monday.dayOfMonth}").performClick()
-        compose.waitUntil(15000) { compose.onAllNodesWithText("Повестка понедельника").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Повестка понедельника").assertIsDisplayed()
+        compose.waitUntil(15000) { compose.onAllNodesWithText(agenda).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(agenda).assertIsDisplayed()
+        capture("week-expanded-monday")
         val tuesdayHeader = compose.onNodeWithText("Вт ${tuesday.dayOfMonth}")
         tuesdayHeader.performScrollTo().performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithText("Итоги вторника").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Итоги вторника").assertIsDisplayed()
-        compose.onNodeWithText("Повестка понедельника").assertDoesNotExist()
+        compose.onNodeWithText(agenda).assertDoesNotExist()
         compose.onNode(hasContentDescription("Добавить запись на вторник", substring = true)).performClick()
         compose.onNodeWithText("Новая запись").assertExists()
         compose.onNodeWithText("Дата · ${tuesday.format(ru.workweek.planner.ui.dateFormat)}").assertExists()
