@@ -1,7 +1,6 @@
 package ru.workweek.planner.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -34,45 +33,38 @@ private fun <T> Choice(title: String, values: List<Pair<T, String>>, selected: T
 }
 
 @Composable
-private fun WeekColorChoice(title: String, selected: WeekColor, theme: Theme, onSelect: (WeekColor) -> Unit) {
-    var choosing by rememberSaveable { mutableStateOf(false) }
-    val dark = theme == Theme.DARK || (theme == Theme.SYSTEM && isSystemInDarkTheme())
-    OutlinedButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.size(20.dp).background(selected.color(dark), androidx.compose.foundation.shape.CircleShape))
-        Text("$title · ${selected.label}", modifier = Modifier.weight(1f).padding(start = 12.dp))
-    }
-    if (choosing) AlertDialog(
-        onDismissRequest = { choosing = false },
-        title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                WeekColor.entries.forEach { color ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .selectable(selected = color == selected, role = Role.RadioButton, onClick = {
-                                onSelect(color)
-                                choosing = false
-                            }),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = color == selected, onClick = null)
-                        Box(Modifier.padding(horizontal = 8.dp).size(20.dp).background(color.color(dark), androidx.compose.foundation.shape.CircleShape))
-                        Text(color.label)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { choosing = false }) { Text("Закрыть") } }
-    )
-}
-
-@Composable
 internal fun SettingsScreen(settings: Settings, status: String, reminderError: String?, onAppearance: (AppearanceSettings) -> Unit, onReset: () -> Unit,
     onReminder: (Boolean, LocalTime) -> Unit, onSystemSettings: () -> Unit) {
     val a = settings.appearance
     var delivery by rememberSaveable(settings.reminder.localDeliveryTime.toString()) { mutableStateOf(settings.reminder.localDeliveryTime.toString()) }
     var timeError by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Оформление", style = MaterialTheme.typography.titleLarge)
+        Choice("Вид недели", listOf(WeekLayout.COMPACT to "Компактный", WeekLayout.EXPANDED to "Развёрнутый"), a.weekLayout) { onAppearance(a.copy(weekLayout = it)) }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Подготовить отчёт по итогам рабочей недели", fontFamily = if (a.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif, fontSize = a.fontSizeSp.sp)
+                Text(if (a.datePlacement == DatePlacement.INSIDE) "21.11 · 09:00" else "09:00", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Choice("Тема", listOf(Theme.SYSTEM to "Системная", Theme.LIGHT to "Светлая", Theme.DARK to "Тёмная"), a.theme) { onAppearance(a.copy(theme = it)) }
+        Choice("Шрифт записей", listOf(NoteFontFamily.SANS to "Без засечек", NoteFontFamily.SERIF to "С засечками"), a.fontFamily) { onAppearance(a.copy(fontFamily = it)) }
+        Choice("Размер текста", listOf(14 to "14 sp", 16 to "16 sp", 18 to "18 sp"), a.fontSizeSp) { onAppearance(a.copy(fontSizeSp = it)) }
+        Choice("Дата записи", listOf(DatePlacement.SEPARATE to "Отдельно в заголовке", DatePlacement.INSIDE to "Внутри карточки"), a.datePlacement) { onAppearance(a.copy(datePlacement = it)) }
+        Choice("Акцент", listOf(Accent.BLUE to "Синий", Accent.TEAL to "Бирюзовый", Accent.PURPLE to "Фиолетовый", Accent.AMBER to "Янтарный"), a.accent) { onAppearance(a.copy(accent = it)) }
+        Text("Цвета недель", style = MaterialTheme.typography.titleMedium)
+        val dark = a.theme == Theme.DARK || (a.theme == Theme.SYSTEM && isSystemInDarkTheme())
+        WeekColorChoice("Прошлые недели", a.resolvedPastWeekColor(dark), a.pastWeekRgb?.let(::weekColorHex) ?: a.pastWeekColor.label) {
+            onAppearance(a.copy(pastWeekRgb = it))
+        }
+        WeekColorChoice("Текущая неделя", a.resolvedCurrentWeekColor(dark), a.currentWeekRgb?.let(::weekColorHex) ?: a.currentWeekColor.label) {
+            onAppearance(a.copy(currentWeekRgb = it))
+        }
+        WeekColorChoice("Будущие недели", a.resolvedFutureWeekColor(dark), a.futureWeekRgb?.let(::weekColorHex) ?: a.futureWeekColor.label) {
+            onAppearance(a.copy(futureWeekRgb = it))
+        }
+        OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) { Text("Сбросить оформление") }
+        HorizontalDivider()
         Text("Завтрашние планы", style = MaterialTheme.typography.titleLarge)
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier
             .fillMaxWidth().heightIn(min = 48.dp).toggleable(value = settings.reminder.enabled, role = Role.Switch) {
@@ -83,32 +75,16 @@ internal fun SettingsScreen(settings: Settings, status: String, reminderError: S
         }
         Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
         reminderError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Text("Около ${settings.reminder.localDeliveryTime}. Android может задерживать доставку.", style = MaterialTheme.typography.bodyMedium)
-        OutlinedTextField(delivery, { delivery = it; timeError = false }, label = { Text("Время сводки ЧЧ:ММ") }, isError = timeError,
-            supportingText = { if (timeError) Text("Введите время от 00:00 до 23:59") }, modifier = Modifier.fillMaxWidth())
-        OutlinedButton(onClick = {
-            val parsed = runCatching { LocalTime.parse(delivery) }.getOrNull()
-            if (parsed == null || !Regex("\\d{2}:\\d{2}").matches(delivery)) timeError = true else onReminder(settings.reminder.enabled, parsed)
-        }, modifier = Modifier.fillMaxWidth()) { Text("Сохранить время") }
-        TextButton(onClick = onSystemSettings) { Text("Уведомления в настройках Android") }
-        HorizontalDivider()
-        Text("Оформление", style = MaterialTheme.typography.titleLarge)
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("Подготовить отчёт по итогам рабочей недели", fontFamily = if (a.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif, fontSize = a.fontSizeSp.sp)
-                Text(if (a.datePlacement == DatePlacement.INSIDE) "21.11 · 09:00" else "09:00", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        if (settings.reminder.enabled) {
+            Text("Около ${settings.reminder.localDeliveryTime}. Android может задерживать доставку.", style = MaterialTheme.typography.bodyMedium)
+            OutlinedTextField(delivery, { delivery = it; timeError = false }, label = { Text("Время сводки ЧЧ:ММ") }, isError = timeError,
+                supportingText = { if (timeError) Text("Введите время от 00:00 до 23:59") }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = {
+                val parsed = runCatching { LocalTime.parse(delivery) }.getOrNull()
+                if (parsed == null || !Regex("\\d{2}:\\d{2}").matches(delivery)) timeError = true else onReminder(settings.reminder.enabled, parsed)
+            }, modifier = Modifier.fillMaxWidth()) { Text("Сохранить время") }
         }
-        Choice("Тема", listOf(Theme.SYSTEM to "Системная", Theme.LIGHT to "Светлая", Theme.DARK to "Тёмная"), a.theme) { onAppearance(a.copy(theme = it)) }
-        Choice("Вид недели", listOf(WeekLayout.COMPACT to "Компактный", WeekLayout.EXPANDED to "Развёрнутый"), a.weekLayout) { onAppearance(a.copy(weekLayout = it)) }
-        Choice("Шрифт записей", listOf(NoteFontFamily.SANS to "Без засечек", NoteFontFamily.SERIF to "С засечками"), a.fontFamily) { onAppearance(a.copy(fontFamily = it)) }
-        Choice("Размер текста", listOf(14 to "14 sp", 16 to "16 sp", 18 to "18 sp"), a.fontSizeSp) { onAppearance(a.copy(fontSizeSp = it)) }
-        Choice("Дата записи", listOf(DatePlacement.SEPARATE to "Отдельно в заголовке", DatePlacement.INSIDE to "Внутри карточки"), a.datePlacement) { onAppearance(a.copy(datePlacement = it)) }
-        Choice("Акцент", listOf(Accent.BLUE to "Синий", Accent.TEAL to "Бирюзовый", Accent.PURPLE to "Фиолетовый", Accent.AMBER to "Янтарный"), a.accent) { onAppearance(a.copy(accent = it)) }
-        Text("Цвета недель", style = MaterialTheme.typography.titleMedium)
-        WeekColorChoice("Прошлые недели", a.pastWeekColor, a.theme) { onAppearance(a.copy(pastWeekColor = it)) }
-        WeekColorChoice("Текущая неделя", a.currentWeekColor, a.theme) { onAppearance(a.copy(currentWeekColor = it)) }
-        WeekColorChoice("Будущие недели", a.futureWeekColor, a.theme) { onAppearance(a.copy(futureWeekColor = it)) }
-        OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) { Text("Сбросить оформление") }
+        TextButton(onClick = onSystemSettings) { Text("Уведомления в настройках Android") }
+
     }
 }

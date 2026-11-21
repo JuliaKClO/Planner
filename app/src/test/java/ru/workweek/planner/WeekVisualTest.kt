@@ -75,7 +75,7 @@ class WeekVisualTest {
         }
         fun chooseLayout(label: String) {
             compose.onNodeWithContentDescription("Открыть настройки").performClick()
-            compose.onNodeWithText(label).performScrollTo().performClick()
+            compose.onNodeWithText(label).assertIsDisplayed().performClick()
             compose.onNodeWithContentDescription("Назад").performClick()
         }
         chooseLayout("Развёрнутый")
@@ -214,7 +214,7 @@ class WeekVisualTest {
             currentWeekColor = palette[1],
             futureWeekColor = palette[2]
         )
-        fun waitForIndicator(color: WeekColor, dark: Boolean) {
+        fun waitForIndicator(expectedArgb: Int) {
             compose.waitUntil(10000) {
                 var actual = 0
                 val center = compose.onNodeWithTag("week-color-indicator").fetchSemanticsNode().boundsInRoot.center
@@ -225,26 +225,26 @@ class WeekVisualTest {
                     actual = bitmap.getPixel(center.x.toInt(), center.y.toInt())
                     bitmap.recycle()
                 }
-                actual == color.color(dark).toArgb()
+                actual == expectedArgb
             }
         }
         for (theme in listOf(Theme.LIGHT, Theme.DARK)) {
             runBlocking { settings.updateAppearance(appearance.copy(theme = theme)) }
             val dark = theme == Theme.DARK
             if (dark) compose.onNodeWithText("Сегодня").performClick()
-            waitForIndicator(appearance.currentWeekColor, dark)
+            waitForIndicator(appearance.currentWeekColor.color(dark).toArgb())
             capture("week-colors-current-${theme.name.lowercase()}")
             compose.onNodeWithContentDescription("Предыдущая неделя").performClick()
-            waitForIndicator(appearance.pastWeekColor, dark)
+            waitForIndicator(appearance.pastWeekColor.color(dark).toArgb())
             capture("week-colors-past-${theme.name.lowercase()}")
             compose.onNodeWithContentDescription("Следующая неделя").performClick()
             compose.onNodeWithContentDescription("Следующая неделя").performClick()
-            waitForIndicator(appearance.futureWeekColor, dark)
+            waitForIndicator(appearance.futureWeekColor.color(dark).toArgb())
             capture("week-colors-future-${theme.name.lowercase()}")
         }
         compose.activityRule.scenario.recreate()
         waitForWeek()
-        waitForIndicator(appearance.futureWeekColor, true)
+        waitForIndicator(appearance.futureWeekColor.color(true).toArgb())
         val restored = runBlocking { settings.settings.first().appearance }
         assertEquals(appearance.copy(theme = Theme.DARK), restored)
         runBlocking { settings.resetAppearance() }
@@ -253,13 +253,23 @@ class WeekVisualTest {
         assertEquals(AppearanceSettings(), defaults)
         compose.onNodeWithContentDescription("Открыть настройки").performClick()
         compose.onNodeWithText("Прошлые недели · ${defaults.pastWeekColor.label}").performScrollTo().performClick()
-        compose.onNodeWithText(palette.last().label).performClick()
+        val colorPanel = compose.onNodeWithContentDescription("Палитра насыщенности и яркости")
+        colorPanel.performScrollTo().performTouchInput { click(center) }
+        capture("week-color-palette")
+        compose.onNodeWithText("Отмена").performScrollTo().performClick()
+        assertEquals(null, runBlocking { settings.settings.first().appearance.pastWeekRgb })
+        compose.onNodeWithText("Прошлые недели · ${defaults.pastWeekColor.label}").performScrollTo().performClick()
+        compose.onNodeWithText("HEX").performScrollTo().performTextReplacement("#AB3791")
+        compose.onNodeWithText("Применить").performScrollTo().performClick()
         compose.waitUntil(10000) {
-            runBlocking { settings.settings.first().appearance.pastWeekColor } == palette.last()
+            runBlocking { settings.settings.first().appearance.pastWeekRgb } == 0xAB3791
         }
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("Прошлые недели · ${palette.last().label}").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Прошлые недели · #AB3791").performScrollTo().assertIsDisplayed()
         capture("week-colors-settings")
+        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Предыдущая неделя").performClick()
+        waitForIndicator(0xFFAB3791.toInt())
     }
 
     @Test fun switchingExpandedDaysKeepsAddOnTheSelectedDate() {
@@ -332,8 +342,10 @@ class WeekVisualTest {
         dayList.performScrollToKey("day-19")
         compose.onNodeWithText(note).assertIsDisplayed().performClick()
         compose.onNodeWithText(note).assertExists()
+        compose.onNodeWithText("Готово").assertIsDisplayed()
         captureBothThemes("editor")
         compose.onNodeWithText("Дата ·", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Готово").assertIsDisplayed()
         capture("editor-last-lines")
         compose.onNodeWithText("Удалить запись").performScrollTo().performClick()
         compose.onNodeWithText("Удалить запись?").assertIsDisplayed()
@@ -434,7 +446,7 @@ class WeekVisualTest {
         val sunday = hasContentDescription("Добавить запись на воскресенье", substring = true)
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(sunday)
         compose.onNode(sunday).assertIsDisplayed().performClick()
-        compose.onNodeWithText("Сохранить").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Готово").assertIsDisplayed()
         capture("editor-200")
     }
 

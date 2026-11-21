@@ -106,7 +106,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     fun leaveEditor() {
         if (pendingWeek) { selectDate(LocalDate.parse(planned)); screen = "week"; pendingWeek = false } else screen = origin
     }
-    fun save(onExit: Boolean = false) {
+    fun save() {
         if (busy) return
         val parsedTime = if (time.isBlank()) null else runCatching { java.time.LocalTime.parse(time) }.getOrNull()
         val date = runCatching { LocalDate.parse(planned) }.getOrNull()
@@ -116,7 +116,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
         if (time.isNotBlank() && (parsedTime == null || !Regex("\\d{2}:\\d{2}").matches(time))) errors["time"] = "Введите время ЧЧ:ММ, от 00:00 до 23:59"
         if (date == null || !date.allowed()) errors["date"] = "Выберите дату с 1900 по 2100 год"
         fieldErrors = errors
-        if (errors.isNotEmpty()) { exitPrompt = onExit; return }
+        if (errors.isNotEmpty()) { exitPrompt = true; return }
         busy = true
         scope.launch {
             try {
@@ -134,7 +134,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
     fun closeEditor(showWeek: Boolean = false) {
         if (busy) return
         pendingWeek = showWeek
-        if (fingerprint() == baseline) leaveEditor() else save(onExit = true)
+        if (fingerprint() == baseline) leaveEditor() else save()
     }
     fun updateAfterMutation(operation: suspend () -> Unit) {
         scope.launch {
@@ -223,7 +223,12 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                                 },
                                 onAdd = { openEditor(null, it) },
                                 onCalendar = { calendarEditor = false; calendar = true },
-                                loading = weekLoad.request != weekRequest, weekEntries = spread, entryContent = dayEntryCard,
+                                loading = weekLoad.request != weekRequest, weekEntries = spread,
+                                entryContent = { entry ->
+                                    EntryCard(entry, appearance, onOpen = { openEditor(entry, entry.plannedDate) },
+                                        onCompleted = { updateAfterMutation { repository.setCompleted(entry.id, !entry.completed) } },
+                                        inWeekSpread = appearance.weekLayout == WeekLayout.EXPANDED)
+                                },
                             )
                         }
                         "day" -> Column(Modifier.fillMaxSize()) {
@@ -265,7 +270,7 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                         "editor" -> EditorScreen(noteText, planned, time, completed, remind, isNew, busy, fieldErrors,
                             settings.reminder.enabled, appearance,
                             onNoteText = { noteText = it }, onTime = { time = it }, onCompleted = { completed = it }, onRemind = { remind = it },
-                            onDate = { calendarEditor = true; calendar = true }, onSave = { save() }, onBack = { closeEditor() },
+                            onDate = { calendarEditor = true; calendar = true }, onBack = { closeEditor() },
                             onDelete = { deletePrompt = true }, onSettings = { settingsOrigin = "editor"; screen = "settings" },
                             onShowWeek = { closeEditor(showWeek = true) })
                     }

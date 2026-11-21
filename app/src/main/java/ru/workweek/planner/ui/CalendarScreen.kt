@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
@@ -77,7 +78,9 @@ internal fun CalendarScreen(initial: LocalDate, today: LocalDate, marked: List<L
             val scale = LocalDensity.current.fontScale
             // Every grid cell is a separate 48 dp target. Text may wrap at large scale.
             Row(Modifier.fillMaxWidth()) {
-                listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach { Text(it, modifier = Modifier.weight(1f), fontSize = 12.sp) }
+                listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach {
+                    Text(it, modifier = Modifier.weight(1f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                }
             }
             val leading = month.atDay(1).dayOfWeek.value - 1
             repeat((leading + month.lengthOfMonth() + 6) / 7) { week ->

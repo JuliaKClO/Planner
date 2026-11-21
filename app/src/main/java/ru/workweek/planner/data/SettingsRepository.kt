@@ -41,7 +41,17 @@ data class AppearanceSettings(
     val pastWeekColor: WeekColor = WeekColor.AMBER,
     val currentWeekColor: WeekColor = WeekColor.TEAL,
     val futureWeekColor: WeekColor = WeekColor.BLUE,
-)
+    val pastWeekRgb: Int? = null,
+    val currentWeekRgb: Int? = null,
+    val futureWeekRgb: Int? = null,
+) {
+    fun resolvedPastWeekColor(dark: Boolean): Color = resolvedWeekColor(pastWeekRgb, pastWeekColor, dark)
+    fun resolvedCurrentWeekColor(dark: Boolean): Color = resolvedWeekColor(currentWeekRgb, currentWeekColor, dark)
+    fun resolvedFutureWeekColor(dark: Boolean): Color = resolvedWeekColor(futureWeekRgb, futureWeekColor, dark)
+}
+
+private fun resolvedWeekColor(rgb: Int?, legacy: WeekColor, dark: Boolean): Color =
+    rgb?.let { Color(0xFF000000.toInt() or it) } ?: legacy.color(dark)
 
 data class ReminderSettings(
     val enabled: Boolean = false,
@@ -66,6 +76,9 @@ class SettingsRepository(context: Context) {
         val pastWeekColor = stringPreferencesKey("past_week_color")
         val currentWeekColor = stringPreferencesKey("current_week_color")
         val futureWeekColor = stringPreferencesKey("future_week_color")
+        val pastWeekRgb = intPreferencesKey("past_week_rgb")
+        val currentWeekRgb = intPreferencesKey("current_week_rgb")
+        val futureWeekRgb = intPreferencesKey("future_week_rgb")
         val reminders = booleanPreferencesKey("reminders_enabled")
         val minute = intPreferencesKey("reminder_minute")
         val revision = longPreferencesKey("schedule_revision")
@@ -83,6 +96,9 @@ class SettingsRepository(context: Context) {
                 pastWeekColor = enumValueOr(p[Keys.pastWeekColor], WeekColor.AMBER),
                 currentWeekColor = enumValueOr(p[Keys.currentWeekColor], WeekColor.TEAL),
                 futureWeekColor = enumValueOr(p[Keys.futureWeekColor], WeekColor.BLUE),
+                pastWeekRgb = p[Keys.pastWeekRgb]?.takeIf { it in 0..0xFFFFFF },
+                currentWeekRgb = p[Keys.currentWeekRgb]?.takeIf { it in 0..0xFFFFFF },
+                futureWeekRgb = p[Keys.futureWeekRgb]?.takeIf { it in 0..0xFFFFFF },
             ),
             reminder = ReminderSettings(
                 enabled = p[Keys.reminders] ?: false,
@@ -94,6 +110,7 @@ class SettingsRepository(context: Context) {
 
     suspend fun updateAppearance(appearance: AppearanceSettings) {
         require(appearance.fontSizeSp in listOf(14, 16, 18))
+        require(listOf(appearance.pastWeekRgb, appearance.currentWeekRgb, appearance.futureWeekRgb).all { it == null || it in 0..0xFFFFFF })
         store.edit { p ->
             p[Keys.theme] = appearance.theme.name
             p[Keys.fontFamily] = appearance.fontFamily.name
@@ -104,6 +121,9 @@ class SettingsRepository(context: Context) {
             p[Keys.pastWeekColor] = appearance.pastWeekColor.name
             p[Keys.currentWeekColor] = appearance.currentWeekColor.name
             p[Keys.futureWeekColor] = appearance.futureWeekColor.name
+            if (appearance.pastWeekRgb == null) p.remove(Keys.pastWeekRgb) else p[Keys.pastWeekRgb] = appearance.pastWeekRgb
+            if (appearance.currentWeekRgb == null) p.remove(Keys.currentWeekRgb) else p[Keys.currentWeekRgb] = appearance.currentWeekRgb
+            if (appearance.futureWeekRgb == null) p.remove(Keys.futureWeekRgb) else p[Keys.futureWeekRgb] = appearance.futureWeekRgb
         }
     }
 

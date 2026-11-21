@@ -50,7 +50,7 @@ class PlannerSmokeTest {
     }
 
     private fun saveEntry() {
-        compose.onNodeWithText("Сохранить").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         waitForWeek()
     }
 
@@ -63,7 +63,7 @@ class PlannerSmokeTest {
         val title = "ОТЧЁТ клиент ${System.nanoTime()}"
         val note = "$title\nДоговор и emoji 📅"
         compose.onNodeWithText("Текст заметки").performTextInput(note)
-        compose.onNodeWithText("Сохранить").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Открыть поиск").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Открыть поиск").performClick()
         compose.onNodeWithText("Поиск по тексту").performTextInput(title.lowercase().replace('ё', 'е'))
@@ -178,14 +178,14 @@ class PlannerSmokeTest {
         compose.onNodeWithText(original).assertExists()
         val edited = "$original\nДобавленная строка"
         compose.onNodeWithText("Текст заметки").performTextReplacement(edited)
-        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         waitForText(edited)
         val saved = runBlocking { repository.get(legacy.id) }!!
         assertEquals("", saved.title)
         assertEquals(edited, saved.body)
         compose.onNodeWithText(edited).performClick()
         compose.onNodeWithText(edited).assertExists()
-        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         waitForText(edited)
         assertEquals(edited, runBlocking { repository.get(legacy.id) }?.body)
     }
@@ -193,7 +193,7 @@ class PlannerSmokeTest {
     @Test fun editedEntryAutosavesOnCloseAndShowWeek() {
         val title = "Автосохранение ${System.nanoTime()}"
         newEntry(title)
-        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         waitForWeek()
         compose.onNodeWithContentDescription("Открыть поиск").performClick()
         compose.onNodeWithText("Поиск по тексту").performTextInput(title.lowercase())
@@ -201,7 +201,7 @@ class PlannerSmokeTest {
         compose.onNodeWithText(title).performClick()
         val firstChange = "$title\nПервое изменение"
         compose.onNodeWithText("Текст заметки").performTextReplacement(firstChange)
-        compose.onNodeWithText("Закрыть").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         waitForText(firstChange)
         val repository = EntryRepository(PlannerDatabase.open(compose.activity))
         val saved = runBlocking { repository.observeSearch(title).first().single() }
@@ -229,7 +229,7 @@ class PlannerSmokeTest {
         } finally {
             runBlocking { withContext(Dispatchers.IO) { database.openHelper.writableDatabase.execSQL("DROP TRIGGER IF EXISTS qa_save_failure") } }
         }
-        val save = compose.onNodeWithText("Сохранить").performScrollTo().fetchSemanticsNode()
+        val save = compose.onNodeWithText("Готово").fetchSemanticsNode()
             .config[androidx.compose.ui.semantics.SemanticsActions.OnClick].action!!
         compose.runOnIdle { save(); save() }
         waitForWeek()
@@ -247,7 +247,7 @@ class PlannerSmokeTest {
         waitForText(token)
         compose.onNodeWithText(token).performClick()
         compose.onNodeWithText("Текст заметки").performTextReplacement("$token изменено")
-        compose.onNodeWithText("Сохранить").performScrollTo().performClick()
+        compose.onNodeWithText("Готово").performClick()
         waitForText("$token изменено")
         compose.onNodeWithText(token.lowercase()).assertExists()
         compose.onNodeWithText("$token изменено").performClick()

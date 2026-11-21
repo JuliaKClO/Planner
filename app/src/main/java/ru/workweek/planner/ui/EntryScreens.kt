@@ -30,13 +30,42 @@ import ru.workweek.planner.data.*
 import java.time.LocalDate
 
 @Composable
-internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () -> Unit, onCompleted: () -> Unit, search: Boolean = false, query: String = "") {
+internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () -> Unit, onCompleted: () -> Unit, search: Boolean = false, query: String = "", inWeekSpread: Boolean = false) {
     val dial = rememberDial()
     val linkColor = MaterialTheme.colorScheme.primary
     val note = entry.noteText
     val displayText = remember(note, search, query, dial, linkColor) {
         if (search) AnnotatedString(searchSnippet(note, query))
         else phoneLinks(note, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)), dial)
+    }
+    val metadata = buildList {
+        if (appearance.datePlacement == DatePlacement.INSIDE) add(entry.plannedDate.format(dateFormat))
+        entry.localTime?.let { add(it.toString()) }
+        if (entry.completed) add("Выполнено")
+    }.joinToString(" · ")
+    if (inWeekSpread) {
+        Column(Modifier.fillMaxWidth()) {
+            Surface(onClick = onOpen, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = displayText,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif,
+                    fontSize = appearance.fontSizeSp.sp,
+                )
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked = entry.completed, onCheckedChange = { onCompleted() }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
+                    contentDescription = if (entry.completed) "Вернуть в невыполненные" else "Выполнить запись"
+                })
+                if (metadata.isNotEmpty()) Text(
+                    metadata,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
     }
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
@@ -50,11 +79,6 @@ internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () 
                         fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif,
                         fontSize = appearance.fontSizeSp.sp
                     )
-                    val metadata = buildList {
-                        if (appearance.datePlacement == DatePlacement.INSIDE) add(entry.plannedDate.format(dateFormat))
-                        entry.localTime?.let { add(it.toString()) }
-                        if (entry.completed) add("Выполнено")
-                    }.joinToString(" · ")
                     if (metadata.isNotEmpty()) Text(metadata, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -142,37 +166,46 @@ internal fun EditorScreen(
     isNew: Boolean, busy: Boolean, errors: Map<String, String>, reminderEnabled: Boolean, appearance: AppearanceSettings,
     onNoteText: (String) -> Unit, onTime: (String) -> Unit,
     onCompleted: (Boolean) -> Unit, onRemind: (Boolean) -> Unit, onDate: () -> Unit,
-    onSave: () -> Unit, onBack: () -> Unit, onDelete: () -> Unit, onSettings: () -> Unit, onShowWeek: () -> Unit
+    onBack: () -> Unit, onDelete: () -> Unit, onSettings: () -> Unit, onShowWeek: () -> Unit
 ) {
     val focus = remember { FocusRequester() }
     val style = LocalTextStyle.current.copy(fontSize = appearance.fontSizeSp.sp, fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif)
     LaunchedEffect(Unit) { if (isNew) focus.requestFocus() }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(if (isNew) "Новая запись" else "Редактирование", style = MaterialTheme.typography.headlineSmall)
-        NotePhoneActions(noteText, enabled = !busy)
-        OutlinedTextField(noteText, onNoteText, label = { Text("Текст заметки") }, textStyle = style, minLines = 6,
-            enabled = !busy, modifier = Modifier.fillMaxWidth().focusRequester(focus), isError = errors.containsKey("body"), supportingText = { errors["body"]?.let { Text(it) } })
-        OutlinedButton(onClick = onDate, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Дата · ${LocalDate.parse(planned).format(dateFormat)}") }
-        errors["date"]?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        OutlinedTextField(time, onTime, label = { Text("Время ЧЧ:ММ, необязательно") }, enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            isError = errors.containsKey("time"), supportingText = { errors["time"]?.let { Text(it) } })
-        if (time.isNotEmpty()) TextButton(onClick = { onTime("") }, enabled = !busy) { Text("Убрать время") }
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(completed, enabled = !busy, role = Role.Checkbox, onValueChange = onCompleted),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Checkbox(completed, null, enabled = !busy, modifier = Modifier.padding(end = 12.dp))
-            Text("Выполнено")
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Action("‹", "Назад", enabled = !busy, onClick = onBack)
+            Text(
+                if (isNew) "Новая запись" else "Редактирование",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            TextButton(onClick = onBack, enabled = !busy) { Text(if (busy) "Сохранение…" else "Готово") }
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(remind, enabled = !busy, role = Role.Checkbox, onValueChange = onRemind),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Checkbox(remind, null, enabled = !busy, modifier = Modifier.padding(end = 12.dp))
-            Text("Напомнить накануне")
-        }
-        if (!reminderEnabled) TextButton(onClick = onSettings, enabled = !busy) { Text("Сводка выключена · Настройки") }
-        Button(onClick = onSave, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Сохранение…" else "Сохранить") }
-        OutlinedButton(onClick = onBack, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Закрыть") }
-        if (!isNew) {
-            TextButton(onClick = onShowWeek, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Показать в неделе") }
-            TextButton(onClick = onDelete, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Удалить запись", color = MaterialTheme.colorScheme.error) }
+        Text("Сохраняется при выходе", Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.padding(horizontal = 4.dp)) { NotePhoneActions(noteText, enabled = !busy) }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(noteText, onNoteText, label = { Text("Текст заметки") }, textStyle = style, minLines = 6,
+                enabled = !busy, modifier = Modifier.fillMaxWidth().focusRequester(focus), isError = errors.containsKey("body"), supportingText = { errors["body"]?.let { Text(it) } })
+            OutlinedButton(onClick = onDate, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Дата · ${LocalDate.parse(planned).format(dateFormat)}") }
+            errors["date"]?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            OutlinedTextField(time, onTime, label = { Text("Время ЧЧ:ММ, необязательно") }, enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                isError = errors.containsKey("time"), supportingText = { errors["time"]?.let { Text(it) } })
+            if (time.isNotEmpty()) TextButton(onClick = { onTime("") }, enabled = !busy) { Text("Убрать время") }
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(completed, enabled = !busy, role = Role.Checkbox, onValueChange = onCompleted),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(completed, null, enabled = !busy, modifier = Modifier.padding(end = 12.dp))
+                Text("Выполнено")
+            }
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(remind, enabled = !busy, role = Role.Checkbox, onValueChange = onRemind),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(remind, null, enabled = !busy, modifier = Modifier.padding(end = 12.dp))
+                Text("Напомнить накануне")
+            }
+            if (!reminderEnabled) TextButton(onClick = onSettings, enabled = !busy) { Text("Сводка выключена · Настройки") }
+            if (!isNew) {
+                TextButton(onClick = onShowWeek, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Показать в неделе") }
+                TextButton(onClick = onDelete, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Удалить запись", color = MaterialTheme.colorScheme.error) }
+            }
         }
     }
 }

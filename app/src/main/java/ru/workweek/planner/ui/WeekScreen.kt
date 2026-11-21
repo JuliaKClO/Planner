@@ -3,6 +3,7 @@ package ru.workweek.planner.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -100,18 +101,24 @@ internal fun WeekScreen(
     val start = startOfWeek(selected)
     val end = start.plusDays(6)
     val currentWeek = startOfWeek(today)
-    val weekColor = when {
-        start < currentWeek -> appearance.pastWeekColor
-        start > currentWeek -> appearance.futureWeekColor
-        else -> appearance.currentWeekColor
-    }
     val background = MaterialTheme.colorScheme.background
-    val indicator = weekColor.color(background.luminance() < 0.5f)
+    val backgroundLuminance = background.luminance()
+    val dark = backgroundLuminance < 0.5f
+    val indicator = when {
+        start < currentWeek -> appearance.resolvedPastWeekColor(dark)
+        start > currentWeek -> appearance.resolvedFutureWeekColor(dark)
+        else -> appearance.resolvedCurrentWeekColor(dark)
+    }
+    val tintedBackground = lerp(background, indicator, 0.10f)
+    val indicatorLuminance = indicator.luminance()
+    val panelLuminance = tintedBackground.luminance()
+    val outlineIndicator = (maxOf(indicatorLuminance, panelLuminance) + 0.05f) /
+        (minOf(indicatorLuminance, panelLuminance) + 0.05f) < 3f
     val large = LocalDensity.current.fontScale > 1.1f
     val shift: (Int) -> Unit = { amount ->
         onSelect(CalendarRules.moveWeek(selected, amount))
     }
-    Column(Modifier.fillMaxSize().background(lerp(background, indicator, 0.10f))) {
+    Column(Modifier.fillMaxSize().background(tintedBackground)) {
         if (large) {
             TextButton(onClick = onCalendar, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Выбрать дату" }) { Text("${start.format(dateFormat)} — ${end.format(dateFormat)}") }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -130,7 +137,11 @@ internal fun WeekScreen(
                 TextButton(onClick = { onSelect(bounded(today)) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Сегодня") }
             }
         }
-        Spacer(Modifier.fillMaxWidth().height(3.dp).background(indicator).testTag("week-color-indicator"))
+        Spacer(
+            Modifier.fillMaxWidth().height(if (outlineIndicator) 5.dp else 3.dp).background(indicator)
+                .then(if (outlineIndicator) Modifier.border(1.dp, MaterialTheme.colorScheme.outline) else Modifier)
+                .testTag("week-color-indicator")
+        )
         var drag by remember { mutableFloatStateOf(0f) }
         val swipeWeeks = Modifier.pointerInput(start, selected) {
             detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, delta -> drag += delta }, onDragEnd = {
@@ -174,8 +185,20 @@ internal fun WeekScreen(
                                 }) {
                                     Row(Modifier.heightIn(min = rowMinimum).padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.width(if (large) 100.dp else 64.dp)) {
-                                            Text("${date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, russian).trimEnd('.').replaceFirstChar { it.titlecase(russian) }} ${date.dayOfMonth}", fontSize = 14.sp,
-                                                color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (date.allowed()) {
+                                                    val arrowColor = MaterialTheme.colorScheme.primary
+                                                    Canvas(Modifier.padding(end = 4.dp).size(10.dp)) {
+                                                        val edgeY = size.height * if (open) 0.65f else 0.35f
+                                                        val point = Offset(size.width / 2, size.height - edgeY)
+                                                        val stroke = 1.6.dp.toPx()
+                                                        drawLine(arrowColor, Offset(0f, edgeY), point, stroke)
+                                                        drawLine(arrowColor, point, Offset(size.width, edgeY), stroke)
+                                                    }
+                                                }
+                                                Text("${date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, russian).trimEnd('.').replaceFirstChar { it.titlecase(russian) }} ${date.dayOfMonth}", fontSize = 14.sp,
+                                                    color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                            }
                                             if (current) Text("Сегодня", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                         }
                                         Column(Modifier.weight(1f)) {
