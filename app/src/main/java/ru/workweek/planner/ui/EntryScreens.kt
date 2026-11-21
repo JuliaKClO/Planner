@@ -1,5 +1,9 @@
 package ru.workweek.planner.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,9 +14,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.workweek.planner.data.*
@@ -20,6 +31,19 @@ import java.time.LocalDate
 
 @Composable
 internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () -> Unit, onCompleted: () -> Unit, search: Boolean = false, query: String = "") {
+    val context = LocalContext.current
+    val linkColor = MaterialTheme.colorScheme.primary
+    val note = entry.noteText
+    val displayText = remember(note, search, query, context, linkColor) {
+        if (search) AnnotatedString(searchSnippet(note, query))
+        else phoneLinks(note, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))) { number ->
+            try {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "Приложение для звонков недоступно", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
             Checkbox(checked = entry.completed, onCheckedChange = { onCompleted() }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
@@ -28,7 +52,7 @@ internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () 
             Surface(onClick = onOpen, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = if (search) searchSnippet(entry.noteText, query) else entry.noteText,
+                        text = displayText,
                         fontFamily = if (appearance.fontFamily == NoteFontFamily.SERIF) FontFamily.Serif else FontFamily.SansSerif,
                         fontSize = appearance.fontSizeSp.sp
                     )
@@ -43,6 +67,20 @@ internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () 
         }
     }
 }
+
+private const val PHONE_SEPARATOR = "[ \\u00A0\\u202F()-]*"
+private val phoneNumber = Regex(
+    "(?<![\\p{L}\\p{N}+])(?:\\+[1-9](?:${PHONE_SEPARATOR}[0-9]){6,14}|[78](?:${PHONE_SEPARATOR}[0-9]){10}|[0-9](?:${PHONE_SEPARATOR}[0-9]){9})(?![\\p{L}\\p{N}])"
+)
+
+internal fun phoneLinks(note: String, styles: TextLinkStyles, dial: (String) -> Unit): AnnotatedString =
+    buildAnnotatedString {
+        append(note)
+        for (match in phoneNumber.findAll(note)) {
+            val number = match.value.filter { it == '+' || it in '0'..'9' }
+            addLink(LinkAnnotation.Clickable(number, styles) { dial(number) }, match.range.first, match.range.last + 1)
+        }
+    }
 
 internal fun searchSnippet(body: String, query: String): String {
     val normalized = ru.workweek.planner.domain.SearchRules.normalize(body)

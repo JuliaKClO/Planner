@@ -2,6 +2,7 @@ package ru.workweek.planner
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -21,6 +22,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import ru.workweek.planner.data.*
@@ -58,6 +60,32 @@ class WeekVisualTest {
             val bounds = it.boundsInRoot
             assertTrue("Добавление должно быть полностью доступно: $bounds", bounds.height >= 48 && bounds.top >= 0 && bounds.bottom <= bottom)
         }
+    }
+
+    @Test fun tappingPhoneNumberInExpandedNoteOpensDialer() {
+        val number = "+7 (999) 123-45-67"
+        val note = "Позвонить: $number\nВстреча 21.11.2026 в 10:30"
+        val repository = EntryRepository(PlannerDatabase.open(compose.activity))
+        runBlocking { repository.save(Entry(title = "", body = note, plannedDate = LocalDate.now())) }
+        val preview = "Позвонить: $number"
+        compose.waitUntil(15000) { compose.onAllNodesWithText(preview).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(preview).performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithText(note, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        val text = compose.onNodeWithText(note, useUnmergedTree = true)
+        val layouts = mutableListOf<TextLayoutResult>()
+        text.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        val links = layout.layoutInput.text.getLinkAnnotations(0, note.length)
+        assertEquals(1, links.size)
+        assertEquals(number, note.substring(links.single().start, links.single().end))
+        val position = layout.getBoundingBox(note.indexOf(number) + 4).center
+        capture("week-phone-link")
+        text.performTouchInput { click(position) }
+        val intent = shadowOf(compose.activity).nextStartedActivity
+        assertEquals(Intent.ACTION_DIAL, intent?.action)
+        assertEquals("tel", intent?.data?.scheme)
+        assertEquals("+79991234567", intent?.data?.schemeSpecificPart)
+        compose.onNodeWithText("Рабочая неделя").assertIsDisplayed()
     }
 
     private fun capture(name: String, dialog: Boolean = false) {
