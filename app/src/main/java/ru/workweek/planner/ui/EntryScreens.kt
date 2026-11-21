@@ -31,18 +31,12 @@ import java.time.LocalDate
 
 @Composable
 internal fun EntryCard(entry: Entry, appearance: AppearanceSettings, onOpen: () -> Unit, onCompleted: () -> Unit, search: Boolean = false, query: String = "") {
-    val context = LocalContext.current
+    val dial = rememberDial()
     val linkColor = MaterialTheme.colorScheme.primary
     val note = entry.noteText
-    val displayText = remember(note, search, query, context, linkColor) {
+    val displayText = remember(note, search, query, dial, linkColor) {
         if (search) AnnotatedString(searchSnippet(note, query))
-        else phoneLinks(note, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))) { number ->
-            try {
-                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(context, "Приложение для звонков недоступно", Toast.LENGTH_SHORT).show()
-            }
-        }
+        else phoneLinks(note, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)), dial)
     }
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
@@ -73,14 +67,54 @@ private val phoneNumber = Regex(
     "(?<![\\p{L}\\p{N}+])(?:\\+[1-9](?:${PHONE_SEPARATOR}[0-9]){6,14}|[78](?:${PHONE_SEPARATOR}[0-9]){10}|[0-9](?:${PHONE_SEPARATOR}[0-9]){9})(?![\\p{L}\\p{N}])"
 )
 
+private fun String.dialNumber() = filter { it == '+' || it in '0'..'9' }
+
+@Composable
+private fun rememberDial(): (String) -> Unit {
+    val context = LocalContext.current
+    return remember(context) {
+        { number ->
+            try {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "Приложение для звонков недоступно", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+}
+
 internal fun phoneLinks(note: String, styles: TextLinkStyles, dial: (String) -> Unit): AnnotatedString =
     buildAnnotatedString {
         append(note)
         for (match in phoneNumber.findAll(note)) {
-            val number = match.value.filter { it == '+' || it in '0'..'9' }
+            val number = match.value.dialNumber()
             addLink(LinkAnnotation.Clickable(number, styles) { dial(number) }, match.range.first, match.range.last + 1)
         }
     }
+
+@Composable
+private fun NotePhoneActions(noteText: String, enabled: Boolean) {
+    val numbers = remember(noteText) { phoneNumber.findAll(noteText).map { it.value }.distinctBy { it.dialNumber() }.toList() }
+    if (numbers.isEmpty()) return
+    val dial = rememberDial()
+    if (numbers.size == 1) {
+        val number = numbers.single()
+        TextButton(onClick = { dial(number.dialNumber()) }, enabled = enabled) { Text("Позвонить $number") }
+    } else {
+        var open by remember { mutableStateOf(false) }
+        Box {
+            TextButton(onClick = { open = true }, enabled = enabled) { Text("Номера телефонов (${numbers.size})") }
+            DropdownMenu(expanded = open && enabled, onDismissRequest = { open = false }) {
+                numbers.forEach { number ->
+                    DropdownMenuItem(text = { Text(number) }, onClick = {
+                        open = false
+                        dial(number.dialNumber())
+                    })
+                }
+            }
+        }
+    }
+}
 
 internal fun searchSnippet(body: String, query: String): String {
     val normalized = ru.workweek.planner.domain.SearchRules.normalize(body)
@@ -115,6 +149,7 @@ internal fun EditorScreen(
     LaunchedEffect(Unit) { if (isNew) focus.requestFocus() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(if (isNew) "Новая запись" else "Редактирование", style = MaterialTheme.typography.headlineSmall)
+        NotePhoneActions(noteText, enabled = !busy)
         OutlinedTextField(noteText, onNoteText, label = { Text("Текст заметки") }, textStyle = style, minLines = 6,
             enabled = !busy, modifier = Modifier.fillMaxWidth().focusRequester(focus), isError = errors.containsKey("body"), supportingText = { errors["body"]?.let { Text(it) } })
         OutlinedButton(onClick = onDate, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Дата · ${LocalDate.parse(planned).format(dateFormat)}") }

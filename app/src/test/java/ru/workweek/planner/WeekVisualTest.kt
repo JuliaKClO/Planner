@@ -126,6 +126,25 @@ class WeekVisualTest {
         compose.onNodeWithText("Рабочая неделя").assertIsDisplayed()
     }
 
+    @Test fun editorOffersPhoneNumbersFromTheEndOfALongNote() {
+        val lastNumber = "8 (999) 765-43-21"
+        val note = "План работ\n+7 (999) 123-45-67\n" + "Заметки о встрече\n".repeat(40) + lastNumber
+        val repository = EntryRepository(PlannerDatabase.open(compose.activity))
+        runBlocking { repository.save(Entry(title = "", body = note, plannedDate = LocalDate.now())) }
+        compose.waitUntil(15000) { compose.onAllNodesWithText("План работ").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("План работ").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithText(note).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(note).performClick()
+        compose.onNodeWithText("Номера телефонов (2)").assertIsDisplayed().performClick()
+        capture("editor-phone-numbers")
+        compose.onNodeWithText(lastNumber).performClick()
+        val intent = shadowOf(compose.activity).nextStartedActivity
+        assertEquals(Intent.ACTION_DIAL, intent?.action)
+        assertEquals("89997654321", intent?.data?.schemeSpecificPart)
+        compose.onNodeWithText("Текст заметки").assertExists()
+        compose.onNodeWithText(note).assertExists()
+    }
+
     private fun capture(name: String, dialog: Boolean = false) {
         compose.waitForIdle()
         compose.runOnIdle {
