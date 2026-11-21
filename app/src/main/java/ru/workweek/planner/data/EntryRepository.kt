@@ -27,6 +27,9 @@ class EntryRepository(private val db: PlannerDatabase, private val clock: Clock 
     }
 
     fun observeDay(date: LocalDate): Flow<List<Entry>> = dao.observeDay(date)
+
+    fun observeWeekEntries(monday: LocalDate): Flow<List<Entry>> =
+        dao.observeWeekEntries(monday, monday.plusDays(6))
     fun observeMarkedDates(start: LocalDate, end: LocalDate): Flow<List<LocalDate>> = dao.observeMarkedDates(start, end)
     suspend fun get(id: String): Entry? = dao.get(id)
 

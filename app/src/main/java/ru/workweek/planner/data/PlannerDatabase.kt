@@ -43,6 +43,9 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE plannedDate = :date ORDER BY completed, localTime IS NULL, localTime, createdAtUtc, id")
     fun observeDay(date: LocalDate): Flow<List<Entry>>
 
+    @Query("SELECT * FROM entries WHERE plannedDate BETWEEN :start AND :end ORDER BY plannedDate, completed, localTime IS NULL, localTime, createdAtUtc, id")
+    fun observeWeekEntries(start: LocalDate, end: LocalDate): Flow<List<Entry>>
+
     @Query("SELECT plannedDate, count(*) AS count FROM entries WHERE plannedDate BETWEEN :start AND :end GROUP BY plannedDate")
     fun observeCounts(start: LocalDate, end: LocalDate): Flow<List<DayCount>>
 

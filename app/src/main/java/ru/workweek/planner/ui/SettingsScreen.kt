@@ -100,6 +100,7 @@ internal fun SettingsScreen(settings: Settings, status: String, reminderError: S
             }
         }
         Choice("Тема", listOf(Theme.SYSTEM to "Системная", Theme.LIGHT to "Светлая", Theme.DARK to "Тёмная"), a.theme) { onAppearance(a.copy(theme = it)) }
+        Choice("Вид недели", listOf(WeekLayout.COMPACT to "Компактный", WeekLayout.EXPANDED to "Развёрнутый"), a.weekLayout) { onAppearance(a.copy(weekLayout = it)) }
         Choice("Шрифт записей", listOf(NoteFontFamily.SANS to "Без засечек", NoteFontFamily.SERIF to "С засечками"), a.fontFamily) { onAppearance(a.copy(fontFamily = it)) }
         Choice("Размер текста", listOf(14 to "14 sp", 16 to "16 sp", 18 to "18 sp"), a.fontSizeSp) { onAppearance(a.copy(fontSizeSp = it)) }
         Choice("Дата записи", listOf(DatePlacement.SEPARATE to "Отдельно в заголовке", DatePlacement.INSIDE to "Внутри карточки"), a.datePlacement) { onAppearance(a.copy(datePlacement = it)) }

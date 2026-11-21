@@ -62,6 +62,44 @@ class WeekVisualTest {
         }
     }
 
+    @Test fun expandedLayoutShowsNotesAcrossTheWeekAndPersists() {
+        waitForWeek()
+        val monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
+        val repository = EntryRepository(PlannerDatabase.open(compose.activity))
+        val notes = listOf("План работ\nПозвонить утром", "Отчёт", "Покупки")
+        runBlocking {
+            listOf(0L, 3L, 6L).zip(notes).forEach { (offset, note) ->
+                repository.save(Entry(title = "", body = note, plannedDate = monday.plusDays(offset)))
+            }
+            repository.save(Entry(title = "", body = "Следующая неделя", plannedDate = monday.plusWeeks(1)))
+        }
+        fun chooseLayout(label: String) {
+            compose.onNodeWithContentDescription("Открыть настройки").performClick()
+            compose.onNodeWithText(label).performScrollTo().performClick()
+            compose.onNodeWithContentDescription("Назад").performClick()
+        }
+        chooseLayout("Развёрнутый")
+        compose.waitUntil(15000) { compose.onAllNodesWithText(notes.first()).fetchSemanticsNodes().isNotEmpty() }
+        notes.forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        val mondayNote = compose.onNodeWithText(notes[0]).fetchSemanticsNode().boundsInRoot
+        val thursdayNote = compose.onNodeWithText(notes[1]).fetchSemanticsNode().boundsInRoot
+        assertTrue(mondayNote.right < thursdayNote.left)
+        assertEquals(7, compose.onAllNodes(add).fetchSemanticsNodes().size)
+        capture("week-expanded-layout")
+
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(15000) { compose.onAllNodesWithText(notes.first()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Следующая неделя").performClick()
+        val nextNote = hasText("Следующая неделя") and !hasContentDescription("Следующая неделя")
+        compose.waitUntil(15000) { compose.onAllNodes(nextNote).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(nextNote).assertIsDisplayed()
+        compose.onNodeWithText(notes.first()).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Предыдущая неделя").performClick()
+        chooseLayout("Компактный")
+        compose.waitUntil(15000) { compose.onAllNodesWithText("План работ").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(notes.first()).assertDoesNotExist()
+    }
+
     @Test fun tappingPhoneNumberInExpandedNoteOpensDialer() {
         val number = "+7 (999) 123-45-67"
         val note = "Позвонить: $number\nВстреча 21.11.2026 в 10:30"

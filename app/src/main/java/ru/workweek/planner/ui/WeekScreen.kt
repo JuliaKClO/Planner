@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -33,6 +34,7 @@ import ru.workweek.planner.data.preview
 import ru.workweek.planner.data.AppearanceSettings
 import ru.workweek.planner.data.DatePlacement
 import ru.workweek.planner.data.NoteFontFamily
+import ru.workweek.planner.data.WeekLayout
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -92,6 +94,7 @@ internal fun WeekScreen(
     onSelect: (LocalDate) -> Unit,
     expanded: Boolean, entries: List<Entry>, dayLoading: Boolean, onToggle: (LocalDate) -> Unit,
     onAdd: (LocalDate) -> Unit, onCalendar: () -> Unit, loading: Boolean,
+    weekEntries: List<Entry>?,
     entryContent: @Composable (Entry) -> Unit
 ) {
     val start = startOfWeek(selected)
@@ -129,18 +132,25 @@ internal fun WeekScreen(
         }
         Spacer(Modifier.fillMaxWidth().height(3.dp).background(indicator).testTag("week-color-indicator"))
         var drag by remember { mutableFloatStateOf(0f) }
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+        val swipeWeeks = Modifier.pointerInput(start, selected) {
+            detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, delta -> drag += delta }, onDragEnd = {
+                if (kotlin.math.abs(drag) > 80.dp.toPx()) shift(if (drag < 0) 1 else -1)
+            })
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).then(swipeWeeks)) {
+            if (appearance.weekLayout == WeekLayout.EXPANDED) {
+                WeekSpread(start, today, weekEntries, twoColumns = !large && maxWidth >= 320.dp,
+                    rowHeight = ((maxHeight - 24.dp) / 3).coerceAtLeast(104.dp),
+                    onAdd = onAdd, entryContent = entryContent)
+                return@BoxWithConstraints
+            }
             val rowMinimum = ((maxHeight - 32.dp) / 7).coerceAtLeast(56.dp)
             val listState = rememberLazyListState()
             LaunchedEffect(start, expanded, selected, dayLoading) {
                 if (expanded && !dayLoading) listState.scrollToItem(selected.dayOfWeek.value - 1)
             }
             LazyColumn(
-                Modifier.fillMaxSize().pointerInput(start, selected) {
-                    detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, delta -> drag += delta }, onDragEnd = {
-                        if (kotlin.math.abs(drag) > 80.dp.toPx()) shift(if (drag < 0) 1 else -1)
-                    })
-                }, state = listState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 repeat(7) { offset ->
@@ -198,6 +208,93 @@ internal fun WeekScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekSpread(
+    start: LocalDate,
+    today: LocalDate,
+    entries: List<Entry>?,
+    twoColumns: Boolean,
+    rowHeight: Dp,
+    onAdd: (LocalDate) -> Unit,
+    entryContent: @Composable (Entry) -> Unit,
+) {
+    val byDate = remember(entries) { entries?.groupBy { it.plannedDate } }
+    val day: @Composable (Int, Dp, Modifier) -> Unit = { offset, minHeight, modifier ->
+        val date = start.plusDays(offset.toLong())
+        SpreadDay(date, date == today, byDate?.get(date).orEmpty(), byDate == null,
+            minHeight, modifier, onAdd, entryContent)
+    }
+    key(start, twoColumns) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (twoColumns) {
+                items(3) { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        day(row, rowHeight, Modifier.weight(1f))
+                        if (row < 2) {
+                            day(row + 3, rowHeight, Modifier.weight(1f))
+                        } else {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                val weekendHeight = (rowHeight - 6.dp) / 2
+                                day(5, weekendHeight, Modifier.fillMaxWidth())
+                                day(6, weekendHeight, Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            } else {
+                items(7) { offset -> day(offset, 56.dp, Modifier.fillMaxWidth()) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpreadDay(
+    date: LocalDate,
+    current: Boolean,
+    entries: List<Entry>,
+    loading: Boolean,
+    minHeight: Dp,
+    modifier: Modifier,
+    onAdd: (LocalDate) -> Unit,
+    entryContent: @Composable (Entry) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier.heightIn(min = minHeight),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = if (current) BorderStroke(2.dp, colors.primary) else null,
+    ) {
+        Column(Modifier.padding(horizontal = 4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                val weekday = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, russian)
+                    .trimEnd('.').replaceFirstChar { it.titlecase(russian) }
+                Text(
+                    "$weekday ${date.format(shortDate)}",
+                    modifier = Modifier.weight(1f).padding(start = 8.dp).semantics {
+                        contentDescription = date.format(fullDate) + if (current) ", сегодня" else ""
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (current) colors.primary else colors.onSurface,
+                )
+                Action("+", "Добавить запись на ${accusativeWeekdays[date.dayOfWeek.value - 1]}, ${date.format(spokenDate)}", date.allowed()) { onAdd(date) }
+            }
+            if (entries.isNotEmpty()) {
+                Column(Modifier.padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    entries.forEach { entry -> key(entry.id) { entryContent(entry) } }
+                }
+            } else if (loading && date.allowed()) {
+                Text("Загрузка…", Modifier.padding(start = 8.dp, bottom = 6.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
     }

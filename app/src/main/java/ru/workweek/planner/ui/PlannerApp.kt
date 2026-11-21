@@ -204,14 +204,28 @@ fun PlannerApp(repository: EntryRepository, preferences: SettingsRepository, tar
                             onCompleted = { updateAfterMutation { repository.setCompleted(entry.id, !entry.completed) } })
                     }
                     when (screen) {
-                        "week" -> WeekScreen(selected, today, week, appearance,
-                            onSelect = ::selectDate, expanded = dayExpanded, entries = day, dayLoading = dayLoad.request != dayRequest,
-                            onToggle = { date ->
-                                dayExpanded = date != selected || !dayExpanded
-                                selectedValue = date.toString()
-                            },
-                            onAdd = { openEditor(null, it) }, onCalendar = { calendarEditor = false; calendar = true },
-                            loading = weekLoad.request != weekRequest, entryContent = dayEntryCard)
+                        "week" -> {
+                            val spread = if (appearance.weekLayout == WeekLayout.EXPANDED) {
+                                val weekEntries by remember(repository, weekRequest) {
+                                    repository.observeWeekEntries(startOfWeek(selected))
+                                        .map { LoadedRows(weekRequest, it) }
+                                        .catch { error = "Не удалось прочитать записи недели." }
+                                }.collectAsState(initial = LoadedRows("", emptyList()))
+                                weekEntries.takeIf { it.request == weekRequest }?.rows
+                            } else null
+                            WeekScreen(
+                                selected, today, week, appearance,
+                                onSelect = ::selectDate, expanded = dayExpanded, entries = day,
+                                dayLoading = dayLoad.request != dayRequest,
+                                onToggle = { date ->
+                                    dayExpanded = date != selected || !dayExpanded
+                                    selectedValue = date.toString()
+                                },
+                                onAdd = { openEditor(null, it) },
+                                onCalendar = { calendarEditor = false; calendar = true },
+                                loading = weekLoad.request != weekRequest, weekEntries = spread, entryContent = dayEntryCard,
+                            )
+                        }
                         "day" -> Column(Modifier.fillMaxSize()) {
                             Text(selected.format(fullDate), modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.titleMedium)
                             Button(onClick = { openEditor(null, selected) }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text("Добавить запись") }

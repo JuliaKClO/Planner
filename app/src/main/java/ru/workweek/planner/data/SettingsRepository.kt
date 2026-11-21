@@ -19,6 +19,7 @@ enum class Theme { SYSTEM, LIGHT, DARK }
 enum class NoteFontFamily { SANS, SERIF }
 enum class DatePlacement { SEPARATE, INSIDE }
 enum class Accent { BLUE, TEAL, PURPLE, AMBER }
+enum class WeekLayout { COMPACT, EXPANDED }
 enum class WeekColor(val label: String, private val light: Long, private val dark: Long) {
     BLUE("Синий", 0xFF2856B5, 0xFFADC6FF),
     TEAL("Бирюзовый", 0xFF006B60, 0xFF76D9C8),
@@ -36,6 +37,7 @@ data class AppearanceSettings(
     val fontSizeSp: Int = 16,
     val datePlacement: DatePlacement = DatePlacement.SEPARATE,
     val accent: Accent = Accent.BLUE,
+    val weekLayout: WeekLayout = WeekLayout.COMPACT,
     val pastWeekColor: WeekColor = WeekColor.AMBER,
     val currentWeekColor: WeekColor = WeekColor.TEAL,
     val futureWeekColor: WeekColor = WeekColor.BLUE,
@@ -60,6 +62,7 @@ class SettingsRepository(context: Context) {
         val fontSize = intPreferencesKey("font_size")
         val datePlacement = stringPreferencesKey("date_placement")
         val accent = stringPreferencesKey("accent")
+        val weekLayout = stringPreferencesKey("week_layout")
         val pastWeekColor = stringPreferencesKey("past_week_color")
         val currentWeekColor = stringPreferencesKey("current_week_color")
         val futureWeekColor = stringPreferencesKey("future_week_color")
@@ -76,6 +79,7 @@ class SettingsRepository(context: Context) {
                 fontSizeSp = (p[Keys.fontSize] ?: 16).takeIf { it in listOf(14, 16, 18) } ?: 16,
                 datePlacement = enumValueOr(p[Keys.datePlacement], DatePlacement.SEPARATE),
                 accent = enumValueOr(p[Keys.accent], Accent.BLUE),
+                weekLayout = enumValueOr(p[Keys.weekLayout], WeekLayout.COMPACT),
                 pastWeekColor = enumValueOr(p[Keys.pastWeekColor], WeekColor.AMBER),
                 currentWeekColor = enumValueOr(p[Keys.currentWeekColor], WeekColor.TEAL),
                 futureWeekColor = enumValueOr(p[Keys.futureWeekColor], WeekColor.BLUE),
@@ -96,6 +100,7 @@ class SettingsRepository(context: Context) {
             p[Keys.fontSize] = appearance.fontSizeSp
             p[Keys.datePlacement] = appearance.datePlacement.name
             p[Keys.accent] = appearance.accent.name
+            p[Keys.weekLayout] = appearance.weekLayout.name
             p[Keys.pastWeekColor] = appearance.pastWeekColor.name
             p[Keys.currentWeekColor] = appearance.currentWeekColor.name
             p[Keys.futureWeekColor] = appearance.futureWeekColor.name
